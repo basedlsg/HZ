@@ -67,3 +67,28 @@ export function getZoneStability(lastActivity: number, intensity: number): 'acti
   if (ageInSeconds < 120) return 'stable';
   return 'fading';
 }
+
+/**
+ * Calculate approximate distance between two geographic points in meters.
+ *
+ * This uses the Haversine formula for spherical distance.
+ * It's not perfectly accurate (Earth is not a perfect sphere), but good enough
+ * for our proximity checks in an MVP.
+ */
+export function calculateDistance(
+  point1: { lat: number; lng: number },
+  point2: { lat: number; lng: number }
+): number {
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = (point1.lat * Math.PI) / 180;
+  const φ2 = (point2.lat * Math.PI) / 180;
+  const Δφ = ((point2.lat - point1.lat) * Math.PI) / 180;
+  const Δλ = ((point2.lng - point1.lng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}

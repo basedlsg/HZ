@@ -57,6 +57,12 @@ export interface ProximalStream {
   location: GeoLocation;
 }
 
+/**
+ * Represents an uploaded video/event captured in a zone.
+ *
+ * Videos are tied to sessions (which have locations) and can be
+ * assigned to zones for geographic aggregation.
+ */
 export interface VideoUpload {
   id: string;
   sessionId: string;
@@ -64,6 +70,18 @@ export interface VideoUpload {
   duration: number;
   size: number;
   filename: string;
+
+  /**
+   * Location where the video was recorded (derived from session).
+   * Used for zone assignment and proximity calculations.
+   */
+  location?: GeoLocation;
+
+  /**
+   * ID of the zone this video belongs to (if assigned).
+   * Used for showing video pulses on map bubbles.
+   */
+  zoneId?: string;
 }
 
 export interface UserProfile {
@@ -77,4 +95,53 @@ export interface QRData {
   ttl: number; // in seconds
   radius: number; // in meters
   timestamp: number;
+}
+
+// ============================================================================
+// Reactions and Comments
+// ============================================================================
+
+/**
+ * Available reaction types for videos/events.
+ *
+ * These are anonymous, count-only reactions:
+ * - 👀 "I see this" (eyesReaction)
+ * - ⚠️ "Risky" (riskyReaction)
+ * - ✅ "Resolved / cooled down" (resolvedReaction)
+ * - ❓ "Unclear" (unclearReaction)
+ */
+export type ReactionType = 'eyes' | 'risky' | 'resolved' | 'unclear';
+
+/**
+ * Aggregated reaction counts for a video/event.
+ * All reactions are anonymous - we only track counts.
+ */
+export interface ReactionCounts {
+  videoId: string;
+  eyes: number;      // 👀 "I see this"
+  risky: number;     // ⚠️ "Risky"
+  resolved: number;  // ✅ "Resolved / cooled down"
+  unclear: number;   // ❓ "Unclear"
+}
+
+/**
+ * A short text comment on a video/event.
+ *
+ * Comments are proximity-gated: users can only comment if:
+ * - They have a fresh check-in session (within COMMENT_SESSION_FRESHNESS_MS)
+ * - Their location is within COMMENT_PROXIMITY_RADIUS_M of the video's zone
+ *
+ * Comments are anonymous (no usernames) and auto-expire with the video.
+ */
+export interface Comment {
+  id: string;
+  videoId: string;
+  text: string;
+  timestamp: number;
+
+  /**
+   * Session ID of the commenter (for rate limiting, not displayed).
+   * We don't show this to users - comments are anonymous.
+   */
+  sessionId: string;
 }
