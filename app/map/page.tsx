@@ -5,28 +5,53 @@ import Link from 'next/link';
 import { HeatBubble } from '@/lib/types';
 import { calculateRecencyDecay, getZoneStability, formatTimestamp } from '@/lib/utils';
 
+interface PulseData {
+  zoneId: string;
+  shouldPulse: boolean;
+  recentVideoCount: number;
+  lastVideoTimestamp: number | null;
+  pulseIntensity: number;
+}
+
 export default function MapView() {
   const [bubbles, setBubbles] = useState<HeatBubble[]>([]);
+  const [pulseData, setPulseData] = useState<Record<string, PulseData>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [hoveredBubble, setHoveredBubble] = useState<HeatBubble | null>(null);
   const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
-    fetchHeatmap();
-    // Refresh every 5 seconds to show time decay
-    const interval = setInterval(fetchHeatmap, 5000);
+    fetchData();
+    // Refresh every 5 seconds to show time decay and pulse updates
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const fetchHeatmap = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch('/api/heatmap');
-      const data = await response.json();
-      if (data.success) {
-        setBubbles(data.bubbles);
+      // Fetch heatmap and pulse data in parallel
+      const [heatmapResponse, pulseResponse] = await Promise.all([
+        fetch('/api/heatmap'),
+        fetch('/api/heatmap-pulse'),
+      ]);
+
+      const heatmapData = await heatmapResponse.json();
+      const pulseDataResponse = await pulseResponse.json();
+
+      if (heatmapData.success) {
+        setBubbles(heatmapData.bubbles);
+      }
+
+      if (pulseDataResponse.success) {
+        // Convert pulse data array to lookup object
+        const pulseLookup: Record<string, PulseData> = {};
+        pulseDataResponse.pulseData.forEach((pd: PulseData) => {
+          pulseLookup[pd.zoneId] = pd;
+        });
+        setPulseData(pulseLookup);
       }
     } catch (error) {
-      console.error('Failed to fetch heatmap:', error);
+      console.error('Failed to fetch map data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -59,6 +84,9 @@ export default function MapView() {
             HOTZONES
           </Link>
           <div className="flex gap-4">
+            <Link href="/videos" className="text-gray-400 hover:text-white">
+              Videos
+            </Link>
             <Link href="/streams" className="text-gray-400 hover:text-white">
               Streams
             </Link>
@@ -83,7 +111,7 @@ export default function MapView() {
                 Each purple bubble represents a <strong>presence zone</strong> - a geographic area with recent activity.
                 Bubble <strong>size</strong> shows intensity (more sessions = larger).
                 Bubble <strong>brightness</strong> shows recency (newer = brighter, older = faded).
-                The number inside is the <strong>session count</strong>. Everything is centered around <strong className="text-blue-400">You</strong>.
+                The number inside is the <strong>session count</strong>. <span className="text-yellow-400">Yellow pulses</span> indicate recent video uploads. Everything is centered around <strong className="text-blue-400">You</strong>.
               </p>
             </div>
             <button
@@ -105,6 +133,9 @@ export default function MapView() {
               <p className="mb-2">
                 <strong>Why ego-centric?</strong> The map is centered on "You" because presence is fundamentally relative.
                 You see what's happening around your location, not a global view.
+              </p>
+              <p className="mb-2">
+                <strong>Video pulses:</strong> When someone uploads a video in a zone, the bubble shows a yellow alert pulse for about 20 seconds. Multiple recent videos create stronger pulses.
               </p>
               <p>
                 <strong>Future evolution:</strong> Real deployments would use geospatial cell systems (like H3 or S2),
@@ -132,7 +163,7 @@ export default function MapView() {
                 <rect width="100%" height="100%" fill="url(#grid)" />
               </svg>
 
-              {/* Heat bubbles with time decay and hover */}
+              {/* Heat bubbles with time decay, hover, and video pulses */}
               {bubbles.map((bubble) => {
                 const { x, y } = coordToPixel(bubble.location.lat, bubble.location.lng);
                 const baseRadius = Math.sqrt(bubble.intensity) * 50 + 20;
@@ -145,28 +176,50 @@ export default function MapView() {
                 const ageInSeconds = (Date.now() - bubble.lastActivity) / 1000;
                 const isFresh = ageInSeconds < 30;
 
-                const stability = getZoneStability(bubble.lastActivity, bubble.intensity);
+                // Get video pulse data for this zone
+                const pulse = pulseData[bubble.id];
+                const shouldPulse = pulse?.shouldPulse || false;
+                const pulseIntensity = pulse?.pulseIntensity || 0;
 
                 return (
-                  <div
-                    key={bubble.id}
-                    className={`absolute rounded-full transition-all duration-300 cursor-pointer ${
-                      isFresh ? 'animate-pulse-subtle' : ''
-                    }`}
-                    style={{
-                      left: `${x}px`,
-                      top: `${y}px`,
-                      width: `${baseRadius * 2}px`,
-                      height: `${baseRadius * 2}px`,
-                      transform: 'translate(-50%, -50%)',
-                      background: `radial-gradient(circle, rgba(168, 85, 247, ${opacity * 0.5}) 0%, rgba(147, 51, 234, ${opacity * 0.25}) 50%, transparent 100%)`,
-                      border: `2px solid rgba(168, 85, 247, ${opacity * 0.8})`,
-                    }}
-                    onMouseEnter={() => setHoveredBubble(bubble)}
-                    onMouseLeave={() => setHoveredBubble(null)}
-                  >
-                    <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-purple-200">
-                      {bubble.sessionCount}
+                  <div key={bubble.id} className="absolute" style={{
+                    left: `${x}px`,
+                    top: `${y}px`,
+                    transform: 'translate(-50%, -50%)',
+                  }}>
+                    {/* Video pulse ring (appears when recent videos uploaded) */}
+                    {shouldPulse && (
+                      <div
+                        className="absolute rounded-full animate-ping"
+                        style={{
+                          left: '50%',
+                          top: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          width: `${(baseRadius + 10 + pulseIntensity * 5) * 2}px`,
+                          height: `${(baseRadius + 10 + pulseIntensity * 5) * 2}px`,
+                          border: `${2 + pulseIntensity}px solid rgba(250, 204, 21, ${0.4 + pulseIntensity * 0.1})`,
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    )}
+
+                    {/* Main bubble */}
+                    <div
+                      className={`rounded-full transition-all duration-300 cursor-pointer ${
+                        isFresh ? 'animate-pulse-subtle' : ''
+                      }`}
+                      style={{
+                        width: `${baseRadius * 2}px`,
+                        height: `${baseRadius * 2}px`,
+                        background: `radial-gradient(circle, rgba(168, 85, 247, ${opacity * 0.5}) 0%, rgba(147, 51, 234, ${opacity * 0.25}) 50%, transparent 100%)`,
+                        border: `2px solid rgba(168, 85, 247, ${opacity * 0.8})`,
+                      }}
+                      onMouseEnter={() => setHoveredBubble(bubble)}
+                      onMouseLeave={() => setHoveredBubble(null)}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-purple-200">
+                        {bubble.sessionCount}
+                      </div>
                     </div>
                   </div>
                 );
@@ -223,6 +276,15 @@ export default function MapView() {
                     </span>
                   </div>
 
+                  {pulseData[hoveredBubble.id]?.recentVideoCount > 0 && (
+                    <div className="flex justify-between border-t border-gray-800 pt-2 mt-2">
+                      <span className="text-gray-400">Recent Videos:</span>
+                      <span className="font-semibold text-yellow-400">
+                        {pulseData[hoveredBubble.id].recentVideoCount}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="pt-2 mt-2 border-t border-gray-800 text-xs text-gray-500">
                     Radius: {hoveredBubble.radius.toFixed(0)}m
                   </div>
@@ -247,11 +309,24 @@ export default function MapView() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 mb-2">
                 <div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white"></div>
                 <div className="text-gray-400">
                   <div className="font-semibold text-white">Your Location</div>
                   <div className="text-xs">Everything relative to you</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10">
+                  <div className="absolute inset-0 rounded-full bg-purple-600/60 border-2 border-purple-600/80 flex items-center justify-center text-xs font-semibold">
+                    2
+                  </div>
+                  <div className="absolute inset-0 rounded-full border-2 border-yellow-400/50 animate-ping"></div>
+                </div>
+                <div className="text-gray-400">
+                  <div className="font-semibold text-white">Video Alert</div>
+                  <div className="text-xs">Recent video uploaded</div>
                 </div>
               </div>
             </div>
@@ -276,7 +351,7 @@ export default function MapView() {
         </div>
 
         {/* Stats */}
-        <div className="mt-6 grid grid-cols-3 gap-4 max-w-md">
+        <div className="mt-6 grid grid-cols-4 gap-4 max-w-2xl">
           <div className="bg-gray-900 rounded-lg p-4">
             <div className="text-2xl font-bold text-purple-400">{bubbles.length}</div>
             <div className="text-xs text-gray-400">Active Zones</div>
@@ -292,6 +367,12 @@ export default function MapView() {
               {bubbles.filter(b => (Date.now() - b.lastActivity) / 1000 < 30).length}
             </div>
             <div className="text-xs text-gray-400">Fresh Zones</div>
+          </div>
+          <div className="bg-gray-900 rounded-lg p-4">
+            <div className="text-2xl font-bold text-yellow-400">
+              {Object.values(pulseData).filter(p => p.shouldPulse).length}
+            </div>
+            <div className="text-xs text-gray-400">Video Alerts</div>
           </div>
         </div>
       </main>
