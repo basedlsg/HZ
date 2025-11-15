@@ -31,3 +31,39 @@ export function formatTimestamp(timestamp: number): string {
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
 }
+
+/**
+ * Calculate a time-decay multiplier for visual effects (opacity, brightness).
+ *
+ * Conceptual model:
+ * - Fresh activity (< 30s) = full strength (1.0)
+ * - Recent activity (30s - 2min) = strong (0.7 - 1.0)
+ * - Fading activity (2min - 5min) = weak (0.3 - 0.7)
+ * - Old activity (> 5min) = very faint (0.1 - 0.3)
+ *
+ * This creates a visual sense of "life" - newer zones appear brighter/stronger.
+ */
+export function calculateRecencyDecay(lastActivity: number): number {
+  const ageInSeconds = (Date.now() - lastActivity) / 1000;
+
+  if (ageInSeconds < 30) return 1.0; // Fresh
+  if (ageInSeconds < 120) return 0.7 + (0.3 * (1 - (ageInSeconds - 30) / 90)); // Recent
+  if (ageInSeconds < 300) return 0.3 + (0.4 * (1 - (ageInSeconds - 120) / 180)); // Fading
+  return Math.max(0.1, 0.3 * (1 - (ageInSeconds - 300) / 300)); // Old
+}
+
+/**
+ * Get a stability label for a zone based on its age and intensity.
+ *
+ * This helps users understand if a zone is:
+ * - "active" (fresh, high intensity)
+ * - "stable" (moderately fresh, consistent)
+ * - "fading" (older, declining)
+ */
+export function getZoneStability(lastActivity: number, intensity: number): 'active' | 'stable' | 'fading' {
+  const ageInSeconds = (Date.now() - lastActivity) / 1000;
+
+  if (ageInSeconds < 60 && intensity > 0.6) return 'active';
+  if (ageInSeconds < 120) return 'stable';
+  return 'fading';
+}

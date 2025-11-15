@@ -16,6 +16,7 @@ class DataStore {
   // Initialize with some fake data
   private initializeFakeData() {
     // Fake heat bubbles in San Francisco area
+    // Each location represents a coarse presence zone
     const fakeLocations = [
       { lat: 37.7749, lng: -122.4194 },
       { lat: 37.7849, lng: -122.4094 },
@@ -24,13 +25,22 @@ class DataStore {
       { lat: 37.7549, lng: -122.4094 },
     ];
 
+    const zoneLabels = ['Mission-01', 'Castro-02', 'SOMA-03', 'Haight-04', 'Marina-05'];
+    const now = Date.now();
+
     fakeLocations.forEach((location, index) => {
+      // Simulate varying recency: some zones are fresh, others are older
+      const ageInSeconds = Math.random() * 180; // 0-3 minutes old
+      const lastActivity = now - (ageInSeconds * 1000);
+
       const bubble: HeatBubble = {
         id: `bubble-${index}`,
         location,
         intensity: Math.random() * 0.7 + 0.3, // 0.3 to 1.0
         radius: Math.random() * 100 + 50, // 50-150 meters
         sessionCount: Math.floor(Math.random() * 10) + 1,
+        lastActivity,
+        label: zoneLabels[index],
       };
       this.heatBubbles.set(bubble.id, bubble);
     });
