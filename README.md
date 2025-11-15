@@ -50,9 +50,26 @@ npm start
 - You'll receive a session token and be redirected to the map
 
 ### 2. View Activity Map
-- See purple heat bubbles representing activity zones
-- Bubble size indicates intensity, numbers show session count
-- Your location is marked with a blue dot
+The Activity Map is an **ego-centric visualization** of nearby presence zones:
+
+- **What you see**: Purple bubbles representing coarse geographic cells with aggregated activity
+- **Size**: Larger bubbles = higher intensity (more sessions in that zone)
+- **Brightness**: Brighter bubbles = more recent activity (time-decay makes old zones fade)
+- **Number**: Session count actively contributing to each zone
+- **Pulse animation**: Fresh zones (< 30 seconds old) have a subtle breathing effect
+- **"You" marker**: Blue dot at center - everything is relative to your location
+
+**Interacting with the map:**
+- **Hover** over any bubble to see detailed zone info (label, sessions, intensity, last activity, stability)
+- **About button** (top-right) explains the conceptual model and future evolution
+- **Auto-refresh**: Map updates every 5 seconds to show zones fading as they age
+
+**Understanding zone status:**
+- 🟢 **Active**: Fresh (≤ 30s), high intensity, pulsing
+- 🟡 **Stable**: Recent (≤ 2min), moderate fade
+- 🟠 **Fading**: Older (> 2min), significantly dimmed
+
+This creates a live view of nearby activity that conveys both spatial distribution and temporal dynamics.
 
 ### 3. Record Video
 - Navigate to Camera view
@@ -109,7 +126,47 @@ npm start
   utils.ts          # Utility functions
 ```
 
-## Notes
+## Conceptual Model: Presence Zones
+
+### What are Presence Zones?
+
+Presence zones are **coarse geographic cells** that aggregate nearby activity into a single visual representation. Instead of showing individual users as precise points (which would compromise privacy and create visual clutter), we cluster activity into zones.
+
+### Why Ego-Centric?
+
+The Activity Map is centered on **"You"** because presence is fundamentally relative:
+- You care about what's happening **near you**, not globally
+- Distances and relevance are measured **from your position**
+- This mirrors how we naturally perceive space and proximity
+
+### How Zones Convey "Life"
+
+Zones use multiple visual channels to communicate activity:
+- **Size** (radius) = intensity/session count (spatial density)
+- **Brightness** (opacity) = recency (temporal freshness)
+- **Animation** (pulse) = freshness indicator (< 30s)
+- **Label** (on hover) = geographic identifier (e.g., "Mission-01")
+
+As zones age, they naturally fade through time-decay:
+- 0-30s: Full brightness, pulsing (active)
+- 30s-2min: Strong, no pulse (stable)
+- 2-5min: Dimming (fading)
+- 5min+: Very faint (stale)
+
+This creates an intuitive sense of where activity **is happening now** vs. where it **was recent** vs. where it's **dying out**.
+
+### Future Evolution
+
+In a production system, zones would be derived from:
+- **Real geospatial cells** (H3, S2, or similar hierarchical systems)
+- **Movement tracking** (zones that migrate as groups move)
+- **Density overlays** (crowd concentration indicators)
+- **Safety/risk signals** (community-reported hazards)
+- **Persistence models** (long-term vs. transient zones)
+
+This MVP uses fake zones with simulated timestamps to demonstrate the core concept without geospatial dependencies.
+
+## Technical Notes
 
 - This is an MVP focused on functionality over architecture
 - No real geospatial calculations (simple distance approximations)
