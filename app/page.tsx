@@ -165,8 +165,11 @@ export default function Home() {
               <Link href="/map" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors">
                 🗺️ Map
               </Link>
+              <Link href="/videos" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors">
+                📹 Videos
+              </Link>
               <Link href="/camera" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors">
-                📹 Camera
+                🎥 Camera
               </Link>
               <Link href="/streams" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors">
                 📡 Streams
@@ -174,7 +177,7 @@ export default function Home() {
               <Link href="/profile" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors">
                 👤 Profile
               </Link>
-              <Link href="/qr" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors col-span-2">
+              <Link href="/qr" className="bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 text-center transition-colors">
                 🔲 QR Codes
               </Link>
             </div>
