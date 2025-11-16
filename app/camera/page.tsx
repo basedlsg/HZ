@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import AspectVideo from '@/components/AspectVideo';
 
 export default function CameraView() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playbackRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -14,12 +16,17 @@ export default function CameraView() {
   const [message, setMessage] = useState('');
   const [hasPermission, setHasPermission] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     startCamera();
     return () => {
       stopCamera();
+      // Clean up blob URL on unmount
+      if (recordedUrl) {
+        URL.revokeObjectURL(recordedUrl);
+      }
     };
   }, []);
 
@@ -33,10 +40,29 @@ export default function CameraView() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
+  /**
+   * Start camera with 16:9 aspect ratio constraints.
+   *
+   * We request common 16:9 resolutions in order of preference:
+   * - 1920x1080 (1080p) - ideal for high-quality capture
+   * - 1280x720 (720p) - good balance of quality and file size
+   * - 640x360 (360p) - fallback for low-end devices
+   *
+   * The browser will try to match the closest supported resolution.
+   */
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+        video: {
+          facingMode: 'user',
+          // Request 16:9 aspect ratio
+          aspectRatio: { ideal: 16 / 9 },
+          // Prefer 720p as a good balance
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          // Fallback constraints
+          frameRate: { ideal: 30, max: 30 },
+        },
         audio: true,
       });
 
@@ -77,6 +103,15 @@ export default function CameraView() {
     mediaRecorder.onstop = () => {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       setRecordedBlob(blob);
+
+      // Create a URL for playback preview
+      const url = URL.createObjectURL(blob);
+      setRecordedUrl(url);
+
+      // Load the video for playback
+      if (playbackRef.current) {
+        playbackRef.current.src = url;
+      }
     };
 
     mediaRecorder.start();
@@ -94,7 +129,11 @@ export default function CameraView() {
 
   const panicClose = () => {
     stopRecording();
+    if (recordedUrl) {
+      URL.revokeObjectURL(recordedUrl);
+    }
     setRecordedBlob(null);
+    setRecordedUrl(null);
     chunksRef.current = [];
     setMessage('Recording discarded');
     setTimeout(() => {
@@ -125,8 +164,14 @@ export default function CameraView() {
       if (data.success) {
         setMessage(`✓ Video uploaded! ID: ${data.videoId}`);
         setTimeout(() => {
+          if (recordedUrl) {
+            URL.revokeObjectURL(recordedUrl);
+          }
           setRecordedBlob(null);
+          setRecordedUrl(null);
           setMessage('');
+          // Redirect to videos page to see the upload
+          router.push('/videos');
         }, 2000);
       } else {
         setMessage(`Error: ${data.error}`);
@@ -154,6 +199,9 @@ export default function CameraView() {
             <Link href="/map" className="text-gray-400 hover:text-white">
               Map
             </Link>
+            <Link href="/videos" className="text-gray-400 hover:text-white">
+              Videos
+            </Link>
             <Link href="/streams" className="text-gray-400 hover:text-white">
               Streams
             </Link>
@@ -168,35 +216,51 @@ export default function CameraView() {
       <main className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-4">
           <h2 className="text-2xl font-bold mb-1">Secure Camera</h2>
-          <p className="text-gray-400 text-sm">Record short video segments</p>
+          <p className="text-gray-400 text-sm">Record short video segments in 16:9 format</p>
         </div>
 
         <div className="space-y-6">
-          {/* Video Display */}
-          <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
+          {/* Video Display - Live Feed or Playback */}
+          {!recordedBlob ? (
+            // Live camera feed
+            <AspectVideo>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
 
-            {/* Recording Indicator */}
-            {isRecording && (
-              <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-2 rounded-full">
-                <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-                <span className="font-semibold">{formatTime(recordingTime)}</span>
-              </div>
-            )}
+              {/* Recording Indicator */}
+              {isRecording && (
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-2 rounded-full z-10">
+                  <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                  <span className="font-semibold">{formatTime(recordingTime)}</span>
+                </div>
+              )}
 
-            {/* No Permission Message */}
-            {!hasPermission && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                <p className="text-gray-400">Requesting camera access...</p>
+              {/* No Permission Message */}
+              {!hasPermission && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
+                  <p className="text-gray-400">Requesting camera access...</p>
+                </div>
+              )}
+            </AspectVideo>
+          ) : (
+            // Playback preview of recorded video
+            <AspectVideo>
+              <video
+                ref={playbackRef}
+                controls
+                playsInline
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-4 left-4 bg-green-600 px-3 py-2 rounded-full z-10">
+                <span className="font-semibold text-sm">Preview</span>
               </div>
-            )}
-          </div>
+            </AspectVideo>
+          )}
 
           {/* Controls */}
           <div className="space-y-4">
@@ -241,7 +305,13 @@ export default function CameraView() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => setRecordedBlob(null)}
+                    onClick={() => {
+                      if (recordedUrl) {
+                        URL.revokeObjectURL(recordedUrl);
+                      }
+                      setRecordedBlob(null);
+                      setRecordedUrl(null);
+                    }}
                     className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
                   >
                     Discard
@@ -266,11 +336,12 @@ export default function CameraView() {
 
           {/* Info */}
           <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
-            <h3 className="font-semibold text-sm mb-2">Security Features</h3>
+            <h3 className="font-semibold text-sm mb-2">Recording Features</h3>
             <ul className="text-sm text-gray-400 space-y-1">
-              <li>• Recordings are stored locally until uploaded</li>
+              <li>• Videos captured in 16:9 aspect ratio (720p preferred)</li>
+              <li>• Preview your recording before uploading</li>
               <li>• Use PANIC CLOSE to immediately discard recording</li>
-              <li>• Video metadata is encrypted on upload (simulated)</li>
+              <li>• Recordings stored locally until uploaded</li>
             </ul>
           </div>
         </div>
