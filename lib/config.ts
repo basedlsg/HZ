@@ -12,6 +12,13 @@
 /** How long (in ms) before a video/event expires and stops showing reactions/comments */
 export const VIDEO_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
+/**
+ * How long (in ms) video files are retained on disk.
+ * Videos older than this are filtered out when listing/serving.
+ * Set to 2 hours for this MVP.
+ */
+export const VIDEO_STORAGE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 /** How long (in ms) a "recent video" counts for map pulse effects */
 export const VIDEO_PULSE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 

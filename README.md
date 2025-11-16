@@ -73,10 +73,12 @@ This creates a live view of nearby activity that conveys both spatial distributi
 
 ### 3. Record Video
 - Navigate to Camera view
-- Click "Start Recording" to begin
+- Click "Start Recording" to begin capturing (16:9 aspect ratio, 720p preferred)
 - Click "Stop Recording" when done
 - Use "PANIC CLOSE" to immediately discard recording
-- Click "Save & Upload" to save the video metadata
+- Click "Save & Upload" to save the video file to disk and metadata
+- Videos are automatically uploaded to the server and stored in `uploads/` directory
+- View your uploaded videos on the Videos page (/videos)
 
 ### 4. View Proximal Streams
 - See a list of nearby presence sessions
@@ -100,30 +102,64 @@ This creates a live view of nearby activity that conveys both spatial distributi
 - **User Profile**: Stored in browser localStorage
 - **Session Data**: Stored in browser localStorage
 - **Presence/Heatmap Data**: In-memory (resets on server restart)
-- **Video Metadata**: In-memory (actual video files not saved)
+- **Video Files**: Stored locally in `uploads/` directory (2-hour retention)
+- **Video Metadata**: In-memory with references to disk files
+
+### Video Storage Details
+
+Videos are saved to a local `uploads/` directory at the project root:
+
+- **Location**: `{project-root}/uploads/`
+- **Filename format**: `{videoId}.webm` (e.g., `video-abc123xyz.webm`)
+- **Retention**: Videos older than **2 hours** are filtered out and not shown in the UI
+- **Cleanup**: Lazy expiry - videos are filtered by timestamp when listing/serving, not actively deleted
+- **Size**: No file size limits enforced (relies on browser MediaRecorder defaults)
+- **Serving**: Videos are streamed via `/api/video/[videoId]` endpoint
+
+**Note**: The `uploads/` directory is created automatically on first video upload. In production, you may want to:
+- Add periodic cleanup jobs to delete expired files from disk
+- Implement file size limits or quotas
+- Add video compression/transcoding
+- Store videos in cloud storage (S3, GCS, etc.)
 
 ## API Endpoints
 
 - `POST /api/checkin` - Create a new presence session
 - `GET /api/heatmap` - Get all heat bubble data
+- `GET /api/heatmap-pulse` - Get video pulse data for map bubbles
 - `GET /api/proximal-streams` - Get nearby presence streams
-- `POST /api/upload-video` - Upload video metadata
+- `POST /api/upload-video` - Upload video file (multipart/form-data)
+- `GET /api/video/[videoId]` - Stream a video file by ID
+- `GET /api/videos` - Get all active video metadata
+- `POST /api/reactions` - Add an anonymous reaction to a video
+- `GET /api/reactions?videoId={id}` - Get reaction counts for a video
+- `POST /api/comments` - Add a proximity-gated comment to a video
+- `GET /api/comments?videoId={id}` - Get comments for a video
 
 ## Project Structure
 
 ```
 /app
   /api              # API routes
-  /camera           # Camera recording view
-  /map              # Activity map view
+    /video/[videoId] # Video streaming endpoint
+    /upload-video    # Video upload handler
+    /reactions       # Reaction management
+    /comments        # Comment management
+  /camera           # Camera recording view (16:9 aspect ratio)
+  /map              # Activity map view with video pulses
   /profile          # User profile management
   /qr               # QR code generator
   /streams          # Proximal streams list
+  /videos           # Video feed with reactions and comments
   page.tsx          # Home/check-in page
+/components
+  AspectVideo.tsx   # Reusable 16:9 video container
 /lib
+  config.ts         # Configuration constants (TTLs, thresholds)
   store.ts          # In-memory data store
   types.ts          # TypeScript type definitions
   utils.ts          # Utility functions
+/uploads            # Local video file storage (auto-created)
 ```
 
 ## Conceptual Model: Presence Zones

@@ -2,7 +2,7 @@
 
 import { CheckInSession, HeatBubble, ProximalStream, VideoUpload, GeoLocation, ReactionCounts, Comment, ReactionType } from './types';
 import { calculateDistance } from './utils';
-import { VIDEO_TTL_MS, ZONE_ASSIGNMENT_MAX_DISTANCE_M, VIDEO_PULSE_WINDOW_MS } from './config';
+import { VIDEO_TTL_MS, VIDEO_STORAGE_TTL_MS, ZONE_ASSIGNMENT_MAX_DISTANCE_M, VIDEO_PULSE_WINDOW_MS } from './config';
 
 // Simple in-memory storage
 class DataStore {
@@ -166,13 +166,14 @@ class DataStore {
   }
 
   /**
-   * Get only non-expired videos (within VIDEO_TTL_MS).
+   * Get only non-expired videos (within VIDEO_STORAGE_TTL_MS).
    * Auto-expire logic: we filter out old videos on read.
+   * Uses 2-hour storage TTL for file retention.
    */
   getActiveVideos(): VideoUpload[] {
     const now = Date.now();
     return this.getAllVideos().filter(
-      (video) => now - video.timestamp < VIDEO_TTL_MS
+      (video) => now - video.timestamp < VIDEO_STORAGE_TTL_MS
     );
   }
 

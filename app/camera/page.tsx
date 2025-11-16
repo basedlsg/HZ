@@ -148,15 +148,15 @@ export default function CameraView() {
       const sessionData = localStorage.getItem('hotzones-session');
       const session = sessionData ? JSON.parse(sessionData) : null;
 
+      // Create FormData to send the actual video file
+      const formData = new FormData();
+      formData.append('video', recordedBlob, `video-${Date.now()}.webm`);
+      formData.append('sessionId', session?.sessionId || 'unknown');
+      formData.append('duration', recordingTime.toString());
+
       const response = await fetch('/api/upload-video', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: session?.sessionId || 'unknown',
-          duration: recordingTime,
-          size: recordedBlob.size,
-          filename: `video-${Date.now()}.webm`,
-        }),
+        body: formData, // Send FormData (no Content-Type header needed, browser sets it)
       });
 
       const data = await response.json();

@@ -72,6 +72,12 @@ export interface VideoUpload {
   filename: string;
 
   /**
+   * Relative path to the video file on disk (e.g., "uploads/video-abc123.webm").
+   * Used to serve the video via the API.
+   */
+  filePath?: string;
+
+  /**
    * Location where the video was recorded (derived from session).
    * Used for zone assignment and proximity calculations.
    */

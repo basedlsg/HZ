@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { VideoUpload, ReactionCounts, ReactionType } from '@/lib/types';
 import { formatTimestamp, calculateDistance } from '@/lib/utils';
 import { COMMENT_PROXIMITY_RADIUS_M, COMMENT_SESSION_FRESHNESS_MS, VIDEO_TTL_MS } from '@/lib/config';
+import AspectVideo from '@/components/AspectVideo';
 
 interface VideoWithMeta extends VideoUpload {
   reactionCounts: ReactionCounts | null;
@@ -256,6 +257,21 @@ export default function VideosView() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Video Player */}
+                  {video.filePath && (
+                    <div className="mb-4">
+                      <AspectVideo className="max-w-2xl mx-auto">
+                        <video
+                          src={`/api/video/${video.id}`}
+                          controls
+                          playsInline
+                          className="w-full h-full object-cover"
+                          preload="metadata"
+                        />
+                      </AspectVideo>
+                    </div>
+                  )}
 
                   {/* Reactions */}
                   <div className="mb-4">
