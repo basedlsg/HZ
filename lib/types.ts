@@ -151,3 +151,23 @@ export interface Comment {
    */
   sessionId: string;
 }
+
+// ============================================================================
+// Votes (Upvote/Downvote)
+// ============================================================================
+
+/**
+ * Vote direction for a video.
+ * Users can upvote (👍), downvote (👎), or have no vote.
+ */
+export type VoteDirection = 'up' | 'down' | 'none';
+
+/**
+ * Aggregated vote counts for a video/event.
+ * Votes are anonymous and auto-expire with the video.
+ */
+export interface VoteCounts {
+  videoId: string;
+  upvotes: number;   // 👍 count
+  downvotes: number; // 👎 count
+}

@@ -1,6 +1,6 @@
 // In-memory data store for Hotzones MVP
 
-import { CheckInSession, HeatBubble, ProximalStream, VideoUpload, GeoLocation, ReactionCounts, Comment, ReactionType } from './types';
+import { CheckInSession, HeatBubble, ProximalStream, VideoUpload, GeoLocation, ReactionCounts, Comment, ReactionType, VoteCounts, VoteDirection } from './types';
 import { calculateDistance } from './utils';
 import { VIDEO_TTL_MS, VIDEO_STORAGE_TTL_MS, ZONE_ASSIGNMENT_MAX_DISTANCE_M, VIDEO_PULSE_WINDOW_MS } from './config';
 
@@ -12,6 +12,7 @@ class DataStore {
   private videos: Map<string, VideoUpload> = new Map();
   private reactions: Map<string, ReactionCounts> = new Map(); // videoId -> counts
   private comments: Map<string, Comment> = new Map(); // commentId -> comment
+  private votes: Map<string, VoteCounts> = new Map(); // videoId -> vote counts
 
   constructor() {
     this.initializeFakeData();
@@ -288,6 +289,69 @@ class DataStore {
       .sort((a, b) => b.timestamp - a.timestamp);
 
     return comments.length > 0 ? comments[0].timestamp : null;
+  }
+
+  // ============================================================================
+  // Vote methods (Upvote/Downvote)
+  // ============================================================================
+
+  /**
+   * Cast or toggle a vote on a video.
+   *
+   * @param videoId - The video to vote on
+   * @param newDirection - 'up', 'down', or 'none'
+   * @param previousDirection - The user's previous vote direction (from localStorage)
+   * @returns Updated vote counts or null if video not found/expired
+   *
+   * Logic:
+   * - If user had no vote and votes up: upvotes +1
+   * - If user had upvote and votes up again: upvotes -1 (toggle off)
+   * - If user had upvote and votes down: upvotes -1, downvotes +1
+   * - If user had downvote and votes up: downvotes -1, upvotes +1
+   * - If user had downvote and votes down again: downvotes -1 (toggle off)
+   */
+  castVote(
+    videoId: string,
+    newDirection: VoteDirection,
+    previousDirection: VoteDirection
+  ): VoteCounts | null {
+    const video = this.getVideo(videoId);
+    if (!video) return null;
+
+    // Check if video is expired (use storage TTL for votes)
+    if (Date.now() - video.timestamp > VIDEO_STORAGE_TTL_MS) {
+      return null;
+    }
+
+    // Get or create vote counts
+    let counts = this.votes.get(videoId);
+    if (!counts) {
+      counts = { videoId, upvotes: 0, downvotes: 0 };
+    }
+
+    // Remove previous vote
+    if (previousDirection === 'up') {
+      counts.upvotes = Math.max(0, counts.upvotes - 1);
+    } else if (previousDirection === 'down') {
+      counts.downvotes = Math.max(0, counts.downvotes - 1);
+    }
+
+    // Add new vote
+    if (newDirection === 'up') {
+      counts.upvotes++;
+    } else if (newDirection === 'down') {
+      counts.downvotes++;
+    }
+
+    this.votes.set(videoId, counts);
+    return counts;
+  }
+
+  /**
+   * Get vote counts for a video.
+   */
+  getVotes(videoId: string): VoteCounts {
+    return this.votes.get(videoId) || { videoId, upvotes: 0, downvotes: 0 };
   }
 }
 

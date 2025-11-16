@@ -20,15 +20,17 @@ export async function GET(request: NextRequest) {
       videos = dataStore.getActiveVideos();
     }
 
-    // Include reactions and comments count for each video
+    // Include reactions, comments count, and vote counts for each video
     const videosWithMeta = videos.map((video) => {
       const reactions = dataStore.getReactions(video.id);
       const comments = dataStore.getCommentsForVideo(video.id);
+      const votes = dataStore.getVotes(video.id);
 
       return {
         ...video,
         reactionCounts: reactions,
         commentCount: comments.length,
+        voteCounts: votes,
       };
     });
 

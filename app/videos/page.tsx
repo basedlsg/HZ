@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { VideoUpload, ReactionCounts, ReactionType } from '@/lib/types';
+import { VideoUpload, ReactionCounts, ReactionType, VoteCounts, VoteDirection } from '@/lib/types';
 import { formatTimestamp, calculateDistance } from '@/lib/utils';
 import { COMMENT_PROXIMITY_RADIUS_M, COMMENT_SESSION_FRESHNESS_MS, VIDEO_TTL_MS } from '@/lib/config';
 import AspectVideo from '@/components/AspectVideo';
@@ -10,6 +10,7 @@ import AspectVideo from '@/components/AspectVideo';
 interface VideoWithMeta extends VideoUpload {
   reactionCounts: ReactionCounts | null;
   commentCount: number;
+  voteCounts: VoteCounts;
 }
 
 interface CommentData {
@@ -26,6 +27,17 @@ export default function VideosView() {
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Track user votes in localStorage: { videoId: 'up' | 'down' | 'none' }
+  const [userVotes, setUserVotes] = useState<Record<string, VoteDirection>>({});
+
+  // Load user votes from localStorage on mount
+  useEffect(() => {
+    const savedVotes = localStorage.getItem('hotzones-votes');
+    if (savedVotes) {
+      setUserVotes(JSON.parse(savedVotes));
+    }
+  }, []);
 
   useEffect(() => {
     fetchVideos();
@@ -66,6 +78,50 @@ export default function VideosView() {
       }
     } catch (error) {
       console.error('Failed to add reaction:', error);
+    }
+  };
+
+  /**
+   * Handle vote (upvote/downvote).
+   * Clicking the same button toggles it off.
+   * Clicking the opposite button switches the vote.
+   */
+  const handleVote = async (videoId: string, direction: VoteDirection) => {
+    try {
+      const previousDirection = userVotes[videoId] || 'none';
+
+      // Determine new direction (toggle if clicking same button)
+      let newDirection: VoteDirection = direction;
+      if (previousDirection === direction) {
+        newDirection = 'none'; // Toggle off
+      }
+
+      const response = await fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId,
+          direction: newDirection,
+          previousDirection,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Update vote counts in videos
+        setVideos((prev) =>
+          prev.map((v) =>
+            v.id === videoId ? { ...v, voteCounts: data.votes } : v
+          )
+        );
+
+        // Update user's vote state
+        const newVotes = { ...userVotes, [videoId]: newDirection };
+        setUserVotes(newVotes);
+        localStorage.setItem('hotzones-votes', JSON.stringify(newVotes));
+      }
+    } catch (error) {
+      console.error('Failed to vote:', error);
     }
   };
 
@@ -272,6 +328,45 @@ export default function VideosView() {
                       </AspectVideo>
                     </div>
                   )}
+
+                  {/* Upvote/Downvote */}
+                  <div className="mb-4 flex items-center gap-3">
+                    <button
+                      onClick={() => !expired && handleVote(video.id, 'up')}
+                      disabled={expired}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                        expired
+                          ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                          : userVotes[video.id] === 'up'
+                          ? 'bg-green-600 text-white shadow-lg'
+                          : 'bg-gray-800 hover:bg-gray-700 text-white'
+                      }`}
+                      title="Upvote"
+                    >
+                      <span className="text-xl">👍</span>
+                      <span className="font-semibold">{video.voteCounts?.upvotes || 0}</span>
+                    </button>
+
+                    <button
+                      onClick={() => !expired && handleVote(video.id, 'down')}
+                      disabled={expired}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                        expired
+                          ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                          : userVotes[video.id] === 'down'
+                          ? 'bg-red-600 text-white shadow-lg'
+                          : 'bg-gray-800 hover:bg-gray-700 text-white'
+                      }`}
+                      title="Downvote"
+                    >
+                      <span className="text-xl">👎</span>
+                      <span className="font-semibold">{video.voteCounts?.downvotes || 0}</span>
+                    </button>
+
+                    <div className="text-sm text-gray-400 ml-2">
+                      Score: {(video.voteCounts?.upvotes || 0) - (video.voteCounts?.downvotes || 0) > 0 ? '+' : ''}{(video.voteCounts?.upvotes || 0) - (video.voteCounts?.downvotes || 0)}
+                    </div>
+                  </div>
 
                   {/* Reactions */}
                   <div className="mb-4">
