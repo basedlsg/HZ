@@ -72,8 +72,15 @@ export interface VideoUpload {
   filename: string;
 
   /**
-   * Relative path to the video file on disk (e.g., "uploads/video-abc123.webm").
-   * Used to serve the video via the API.
+   * Public URL to the video file in Cloudflare R2 storage.
+   * Example: "https://...r2.cloudflarestorage.com/hotzones/videos/video-abc123.webm"
+   * Videos are served directly from this URL (no server streaming).
+   */
+  cloudUrl?: string;
+
+  /**
+   * @deprecated Legacy field from local filesystem storage.
+   * Use cloudUrl instead for R2-stored videos.
    */
   filePath?: string;
 

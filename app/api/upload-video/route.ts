@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
 import { dataStore } from '@/lib/store';
 import { generateId } from '@/lib/utils';
 import { VideoUpload } from '@/lib/types';
+import { uploadVideoToR2 } from '@/lib/storage';
 
 /**
  * POST /api/upload-video
@@ -14,7 +12,7 @@ import { VideoUpload } from '@/lib/types';
  * - sessionId: user session identifier
  * - duration: recording duration in seconds
  *
- * Saves the video file to uploads/ directory and stores metadata.
+ * Uploads the video to Cloudflare R2 storage and stores metadata in memory.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -39,26 +37,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique video ID and filename
+    // Generate unique video ID
     const videoId = generateId('video');
-    const fileExtension = videoFile.name.split('.').pop() || 'webm';
-    const uniqueFilename = `${videoId}.${fileExtension}`;
 
-    // Define upload directory path (relative to project root)
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-
-    // Create uploads directory if it doesn't exist
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
-
-    // Full file path
-    const filePath = path.join(uploadsDir, uniqueFilename);
-
-    // Convert File to Buffer and write to disk
+    // Convert File to Buffer for R2 upload
     const bytes = await videoFile.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
+
+    // Upload to Cloudflare R2
+    const cloudUrl = await uploadVideoToR2(
+      videoId,
+      videoFile.type || 'video/webm',
+      buffer
+    );
 
     // Get session to extract location for zone assignment
     const session = dataStore.getSession(sessionId);
@@ -71,8 +62,8 @@ export async function POST(request: NextRequest) {
       timestamp: Date.now(),
       duration,
       size: videoFile.size,
-      filename: uniqueFilename,
-      filePath: `uploads/${uniqueFilename}`, // Store relative path
+      filename: `${videoId}.webm`,
+      cloudUrl, // R2 public URL
       location,
     };
 
@@ -84,18 +75,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Store video metadata
+    // Store video metadata in memory
     dataStore.addVideo(video);
 
     return NextResponse.json({
       success: true,
       videoId: video.id,
-      message: 'Video uploaded and saved successfully',
+      cloudUrl: video.cloudUrl,
+      message: 'Video uploaded to R2 successfully',
     });
   } catch (error) {
     console.error('Video upload error:', error);
     return NextResponse.json(
-      { error: 'Failed to upload video' },
+      { error: 'Failed to upload video to R2' },
       { status: 500 }
     );
   }

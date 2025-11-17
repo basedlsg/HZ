@@ -102,25 +102,46 @@ This creates a live view of nearby activity that conveys both spatial distributi
 - **User Profile**: Stored in browser localStorage
 - **Session Data**: Stored in browser localStorage
 - **Presence/Heatmap Data**: In-memory (resets on server restart)
-- **Video Files**: Stored locally in `uploads/` directory (2-hour retention)
-- **Video Metadata**: In-memory with references to disk files
+- **Video Files**: Stored in **Cloudflare R2** (S3-compatible cloud storage)
+- **Video Metadata**: In-memory with references to cloud URLs
 
 ### Video Storage Details
 
-Videos are saved to a local `uploads/` directory at the project root:
+Videos are uploaded to **Cloudflare R2** cloud storage:
 
-- **Location**: `{project-root}/uploads/`
-- **Filename format**: `{videoId}.webm` (e.g., `video-abc123xyz.webm`)
-- **Retention**: Videos older than **2 hours** are filtered out and not shown in the UI
-- **Cleanup**: Lazy expiry - videos are filtered by timestamp when listing/serving, not actively deleted
-- **Size**: No file size limits enforced (relies on browser MediaRecorder defaults)
-- **Serving**: Videos are streamed via `/api/video/[videoId]` endpoint
+- **Storage**: Cloudflare R2 (S3-compatible object storage)
+- **Location**: `hotzones` bucket at `videos/{videoId}.webm`
+- **Public URLs**: e.g., `https://...r2.cloudflarestorage.com/hotzones/videos/video-abc123.webm`
+- **Retention**: Videos older than **2 hours** are filtered out in the app logic
+- **Cleanup**: TTL enforcement in app code; optionally configure R2 lifecycle rules for automatic deletion
+- **Serving**: Videos served directly from R2 URLs (no server streaming required)
+- **Global Access**: R2 CDN delivers videos worldwide with low latency
 
-**Note**: The `uploads/` directory is created automatically on first video upload. In production, you may want to:
-- Add periodic cleanup jobs to delete expired files from disk
-- Implement file size limits or quotas
-- Add video compression/transcoding
-- Store videos in cloud storage (S3, GCS, etc.)
+### R2 Configuration
+
+Set these environment variables (see `.env.example`):
+
+```bash
+R2_ACCESS_KEY_ID=your-access-key
+R2_SECRET_ACCESS_KEY=your-secret-key
+R2_ENDPOINT=https://...r2.cloudflarestorage.com
+R2_BUCKET=hotzones
+R2_PUBLIC_BASE_URL=https://...r2.cloudflarestorage.com/hotzones
+```
+
+**For Vercel deployment:**
+```bash
+vercel env add R2_ACCESS_KEY_ID
+vercel env add R2_SECRET_ACCESS_KEY
+vercel env add R2_ENDPOINT
+vercel env add R2_BUCKET
+vercel env add R2_PUBLIC_BASE_URL
+```
+
+Or use the Vercel dashboard: Project Settings → Environment Variables
+
+**Optional: R2 Lifecycle Rule**
+For automatic deletion of old videos, configure an R2 lifecycle policy to delete objects after N hours/days. This complements the app's TTL enforcement.
 
 ## API Endpoints
 
@@ -128,13 +149,16 @@ Videos are saved to a local `uploads/` directory at the project root:
 - `GET /api/heatmap` - Get all heat bubble data
 - `GET /api/heatmap-pulse` - Get video pulse data for map bubbles
 - `GET /api/proximal-streams` - Get nearby presence streams
-- `POST /api/upload-video` - Upload video file (multipart/form-data)
-- `GET /api/video/[videoId]` - Stream a video file by ID
-- `GET /api/videos` - Get all active video metadata
+- `POST /api/upload-video` - Upload video file to R2 (multipart/form-data)
+- `GET /api/videos` - Get all active video metadata (includes cloudUrl)
 - `POST /api/reactions` - Add an anonymous reaction to a video
 - `GET /api/reactions?videoId={id}` - Get reaction counts for a video
 - `POST /api/comments` - Add a proximity-gated comment to a video
 - `GET /api/comments?videoId={id}` - Get comments for a video
+- `POST /api/vote` - Cast or toggle a vote on a video
+- `GET /api/vote?videoId={id}` - Get vote counts for a video
+
+**Note**: Videos are served directly from R2 public URLs, not via server API.
 
 ## Project Structure
 

@@ -315,15 +315,16 @@ export default function VideosView() {
                   </div>
 
                   {/* Video Player */}
-                  {video.filePath && (
+                  {video.cloudUrl && (
                     <div className="mb-4">
                       <AspectVideo className="max-w-2xl mx-auto">
                         <video
-                          src={`/api/video/${video.id}`}
+                          src={video.cloudUrl}
                           controls
                           playsInline
                           className="w-full h-full object-cover"
                           preload="metadata"
+                          crossOrigin="anonymous"
                         />
                       </AspectVideo>
                     </div>
