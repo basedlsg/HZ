@@ -7,61 +7,89 @@ import { VIDEO_TTL_MS, VIDEO_STORAGE_TTL_MS, ZONE_ASSIGNMENT_MAX_DISTANCE_M, VID
 // Simple in-memory storage
 class DataStore {
   private sessions: Map<string, CheckInSession> = new Map();
-  private heatBubbles: Map<string, HeatBubble> = new Map();
-  private proximalStreams: Map<string, ProximalStream> = new Map();
   private videos: Map<string, VideoUpload> = new Map();
   private reactions: Map<string, ReactionCounts> = new Map(); // videoId -> counts
   private comments: Map<string, Comment> = new Map(); // commentId -> comment
   private votes: Map<string, VoteCounts> = new Map(); // videoId -> vote counts
+  // Note: heatBubbles and proximalStreams are generated dynamically, not stored
 
   constructor() {
-    this.initializeFakeData();
+    // No fake data initialization - zones are generated dynamically from sessions
   }
 
-  // Initialize with some fake data
-  private initializeFakeData() {
-    // Fake heat bubbles in San Francisco area
-    // Each location represents a coarse presence zone
-    const fakeLocations = [
-      { lat: 37.7749, lng: -122.4194 },
-      { lat: 37.7849, lng: -122.4094 },
-      { lat: 37.7649, lng: -122.4294 },
-      { lat: 37.7949, lng: -122.4394 },
-      { lat: 37.7549, lng: -122.4094 },
-    ];
-
-    const zoneLabels = ['Mission-01', 'Castro-02', 'SOMA-03', 'Haight-04', 'Marina-05'];
+  /**
+   * Generate heat bubbles dynamically from active sessions.
+   * Sessions within 500m of each other are clustered into the same zone.
+   *
+   * Algorithm:
+   * 1. Get all active sessions (within last 30 minutes)
+   * 2. Cluster sessions by proximity (500m radius)
+   * 3. Calculate zone properties (center, intensity, session count, last activity)
+   */
+  private generateDynamicZones(): HeatBubble[] {
+    const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+    const CLUSTER_RADIUS_M = 500; // Cluster sessions within 500m
     const now = Date.now();
 
-    fakeLocations.forEach((location, index) => {
-      // Simulate varying recency: some zones are fresh, others are older
-      const ageInSeconds = Math.random() * 180; // 0-3 minutes old
-      const lastActivity = now - (ageInSeconds * 1000);
+    // Get active sessions
+    const activeSessions = Array.from(this.sessions.values())
+      .filter(session => now - session.timestamp < SESSION_TTL_MS);
 
-      const bubble: HeatBubble = {
-        id: `bubble-${index}`,
-        location,
-        intensity: Math.random() * 0.7 + 0.3, // 0.3 to 1.0
-        radius: Math.random() * 100 + 50, // 50-150 meters
-        sessionCount: Math.floor(Math.random() * 10) + 1,
+    if (activeSessions.length === 0) {
+      return [];
+    }
+
+    // Simple clustering: for each session, find all nearby sessions
+    const clusters: CheckInSession[][] = [];
+    const processed = new Set<string>();
+
+    for (const session of activeSessions) {
+      if (processed.has(session.id)) continue;
+
+      // Create new cluster
+      const cluster = [session];
+      processed.add(session.id);
+
+      // Find all sessions within CLUSTER_RADIUS_M
+      for (const otherSession of activeSessions) {
+        if (processed.has(otherSession.id)) continue;
+
+        const distance = calculateDistance(session.location, otherSession.location);
+        if (distance <= CLUSTER_RADIUS_M) {
+          cluster.push(otherSession);
+          processed.add(otherSession.id);
+        }
+      }
+
+      clusters.push(cluster);
+    }
+
+    // Convert clusters to heat bubbles
+    return clusters.map((cluster, index) => {
+      // Calculate centroid (average location)
+      const centroid = {
+        lat: cluster.reduce((sum, s) => sum + s.location.lat, 0) / cluster.length,
+        lng: cluster.reduce((sum, s) => sum + s.location.lng, 0) / cluster.length,
+      };
+
+      // Find most recent activity
+      const lastActivity = Math.max(...cluster.map(s => s.timestamp));
+
+      // Calculate intensity based on session count and recency
+      const ageInMinutes = (now - lastActivity) / (60 * 1000);
+      const recencyFactor = Math.max(0.3, 1 - (ageInMinutes / 30)); // Fade over 30 min
+      const densityFactor = Math.min(1, cluster.length / 5); // Max at 5+ sessions
+      const intensity = (recencyFactor + densityFactor) / 2;
+
+      return {
+        id: `zone-${index}`,
+        location: centroid,
+        intensity,
+        radius: Math.min(CLUSTER_RADIUS_M, 100 + cluster.length * 20), // Grows with sessions
+        sessionCount: cluster.length,
         lastActivity,
-        label: zoneLabels[index],
+        label: `Zone ${index + 1}`,
       };
-      this.heatBubbles.set(bubble.id, bubble);
-    });
-
-    // Fake proximal streams
-    const fakeAliases = ['ghost_rider', 'neon_cat', 'cyber_punk', 'void_walker', 'pixel_sage'];
-    fakeAliases.forEach((alias, index) => {
-      const stream: ProximalStream = {
-        id: `stream-${index}`,
-        alias,
-        distance: Math.random() * 500 + 10, // 10-510 meters
-        stability: Math.random() * 0.6 + 0.4, // 0.4 to 1.0
-        lastSeen: Date.now() - Math.random() * 60000, // within last minute
-        location: fakeLocations[index % fakeLocations.length],
-      };
-      this.proximalStreams.set(stream.id, stream);
     });
   }
 
@@ -81,12 +109,21 @@ class DataStore {
   // Heat bubble / Zone methods
   // ============================================================================
 
+  /**
+   * Get all heat bubbles (zones).
+   * Zones are generated dynamically from active sessions, not stored.
+   */
   getAllHeatBubbles(): HeatBubble[] {
-    return Array.from(this.heatBubbles.values());
+    return this.generateDynamicZones();
   }
 
+  /**
+   * Get a specific heat bubble by ID.
+   * Since zones are dynamic, this regenerates all zones and finds the matching one.
+   */
   getHeatBubble(id: string): HeatBubble | undefined {
-    return this.heatBubbles.get(id);
+    const zones = this.generateDynamicZones();
+    return zones.find(zone => zone.id === id);
   }
 
   /**
@@ -96,7 +133,10 @@ class DataStore {
   findNearestZone(location: GeoLocation): { zoneId: string; distance: number } | null {
     let nearest: { zoneId: string; distance: number } | null = null;
 
-    for (const bubble of this.heatBubbles.values()) {
+    // Get dynamic zones
+    const zones = this.generateDynamicZones();
+
+    for (const bubble of zones) {
       const distance = calculateDistance(location, bubble.location);
 
       if (distance <= ZONE_ASSIGNMENT_MAX_DISTANCE_M) {
@@ -113,11 +153,35 @@ class DataStore {
   // Proximal streams methods
   // ============================================================================
 
+  /**
+   * Get proximal streams (nearby sessions) dynamically.
+   * Returns all active sessions within maxDistance from the given location.
+   */
   getProximalStreams(location: GeoLocation, maxDistance: number = 1000): ProximalStream[] {
-    const streams = Array.from(this.proximalStreams.values());
-    // Simple distance filter (not accurate geospatial math)
-    return streams
-      .filter(stream => stream.distance < maxDistance)
+    const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+    const now = Date.now();
+
+    // Get active sessions
+    const activeSessions = Array.from(this.sessions.values())
+      .filter(session => now - session.timestamp < SESSION_TTL_MS);
+
+    // Convert to proximal streams with distance calculation
+    return activeSessions
+      .map((session): ProximalStream => {
+        const distance = calculateDistance(location, session.location);
+        const ageInSeconds = (now - session.timestamp) / 1000;
+        const stability = Math.max(0.4, 1 - (ageInSeconds / 1800)); // Fade over 30 min
+
+        return {
+          id: session.id,
+          alias: session.alias || 'Anonymous',
+          distance,
+          stability,
+          lastSeen: session.timestamp,
+          location: session.location,
+        };
+      })
+      .filter(stream => stream.distance <= maxDistance)
       .sort((a, b) => a.distance - b.distance);
   }
 
