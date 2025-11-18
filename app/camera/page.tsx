@@ -17,6 +17,7 @@ export default function CameraView() {
   const [hasPermission, setHasPermission] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment'); // Default to back camera
   const router = useRouter();
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function CameraView() {
         URL.revokeObjectURL(recordedUrl);
       }
     };
-  }, []);
+  }, [facingMode]); // Restart camera when facingMode changes
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -54,9 +55,9 @@ export default function CameraView() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user',
-          // Request 16:9 aspect ratio
-          aspectRatio: { ideal: 16 / 9 },
+          facingMode: facingMode,
+          // Enforce 16:9 aspect ratio more strictly
+          aspectRatio: { exact: 16 / 9 },
           // Prefer 720p as a good balance
           width: { ideal: 1280 },
           height: { ideal: 720 },
@@ -69,10 +70,32 @@ export default function CameraView() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setHasPermission(true);
+        setMessage('');
       }
     } catch (error) {
       console.error('Error accessing camera:', error);
-      setMessage('Failed to access camera. Please grant permissions.');
+      // If exact aspect ratio fails, try with ideal
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: facingMode,
+            aspectRatio: { ideal: 16 / 9 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 30 },
+          },
+          audio: true,
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          setHasPermission(true);
+          setMessage('');
+        }
+      } catch (fallbackError) {
+        console.error('Fallback camera access failed:', fallbackError);
+        setMessage('Failed to access camera. Please grant permissions.');
+      }
     }
   };
 
@@ -125,6 +148,13 @@ export default function CameraView() {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
+  };
+
+  const toggleCamera = () => {
+    // Stop current camera before switching
+    stopCamera();
+    // Toggle between front and back camera
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
   };
 
   const panicClose = () => {
@@ -229,7 +259,7 @@ export default function CameraView() {
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain bg-black"
               />
 
               {/* Recording Indicator */}
@@ -238,6 +268,18 @@ export default function CameraView() {
                   <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
                   <span className="font-semibold">{formatTime(recordingTime)}</span>
                 </div>
+              )}
+
+              {/* Camera Toggle Button */}
+              {!isRecording && hasPermission && (
+                <button
+                  onClick={toggleCamera}
+                  className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 backdrop-blur px-4 py-2 rounded-full z-10 transition-colors border border-white/20"
+                >
+                  <span className="font-semibold text-sm">
+                    {facingMode === 'user' ? '🔄 Back' : '🔄 Selfie'}
+                  </span>
+                </button>
               )}
 
               {/* No Permission Message */}
@@ -254,7 +296,7 @@ export default function CameraView() {
                 ref={playbackRef}
                 controls
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain bg-black"
               />
               <div className="absolute top-4 left-4 bg-green-600 px-3 py-2 rounded-full z-10">
                 <span className="font-semibold text-sm">Preview</span>
