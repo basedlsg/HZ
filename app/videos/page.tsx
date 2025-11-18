@@ -256,7 +256,11 @@ export default function VideosView() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      {/*
+        Expanded to max-w-6xl for larger 16:9 video display.
+        Videos will feel like full-width canvases instead of squeezed boxes.
+      */}
+      <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="mb-6">
           <h2 className="text-2xl font-bold mb-1">Video Events</h2>
           <p className="text-gray-400 text-sm">
@@ -315,14 +319,21 @@ export default function VideosView() {
                   </div>
 
                   {/* Video Player */}
+                  {/*
+                    Full-width 16:9 video player.
+                    - AspectVideo enforces 16:9 aspect ratio
+                    - No max-width constraint = expands to full card width
+                    - object-contain preserves aspect ratio without cropping
+                    - bg-black prevents white letterboxing
+                  */}
                   {video.cloudUrl && (
                     <div className="mb-4">
-                      <AspectVideo className="max-w-2xl mx-auto">
+                      <AspectVideo>
                         <video
                           src={video.cloudUrl}
                           controls
                           playsInline
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain bg-black"
                           preload="metadata"
                           crossOrigin="anonymous"
                         />
