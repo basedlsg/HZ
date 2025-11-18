@@ -28,6 +28,34 @@ const Popup = dynamic(
   { ssr: false }
 );
 
+// Dynamically import the recenter component (must be client-side)
+const RecenterMap = dynamic(
+  () => import('react-leaflet').then(mod => {
+    const { useMap } = mod;
+
+    /**
+     * RecenterMap component
+     * Uses Leaflet's useMap hook to recenter the map when userLocation changes.
+     * This must be a child of MapContainer to access the map instance.
+     */
+    const RecenterComponent = ({ center }: { center: [number, number] }) => {
+      const map = useMap();
+
+      useEffect(() => {
+        // Smoothly animate to new center when location changes
+        map.flyTo(center, 14, {
+          duration: 1.5 // 1.5 second animation
+        });
+      }, [center, map]);
+
+      return null;
+    };
+
+    return { default: RecenterComponent };
+  }),
+  { ssr: false }
+);
+
 interface PulseData {
   zoneId: string;
   shouldPulse: boolean;
@@ -43,25 +71,41 @@ export default function MapView() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [showAbout, setShowAbout] = useState(false);
 
+  // Check for user location updates from localStorage
   useEffect(() => {
-    // Get user location from session
-    const sessionData = localStorage.getItem('hotzones-session');
-    if (sessionData) {
-      const session = JSON.parse(sessionData);
-      if (session.location) {
-        setUserLocation([session.location.lat, session.location.lng]);
+    const updateUserLocation = () => {
+      const sessionData = localStorage.getItem('hotzones-session');
+      if (sessionData) {
+        const session = JSON.parse(sessionData);
+        if (session.location) {
+          const newLocation: [number, number] = [session.location.lat, session.location.lng];
+          // Only update if location actually changed
+          if (!userLocation || userLocation[0] !== newLocation[0] || userLocation[1] !== newLocation[1]) {
+            setUserLocation(newLocation);
+          }
+        }
+      } else if (!userLocation) {
+        // No session and no location set yet, use default (SF)
+        setUserLocation([37.7749, -122.4194]);
       }
-    }
+    };
 
-    // If no session location, use default (SF)
-    if (!userLocation) {
-      setUserLocation([37.7749, -122.4194]);
-    }
+    // Initial location check
+    updateUserLocation();
 
+    // Poll for location changes every 2 seconds
+    // This catches when user checks in to a new location
+    const locationInterval = setInterval(updateUserLocation, 2000);
+
+    return () => clearInterval(locationInterval);
+  }, []); // Only run on mount
+
+  // Fetch map data (zones, pulses)
+  useEffect(() => {
     fetchData();
     // Refresh every 5 seconds to show time decay and pulse updates
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+    const dataInterval = setInterval(fetchData, 5000);
+    return () => clearInterval(dataInterval);
   }, []);
 
   const fetchData = async () => {
@@ -178,6 +222,9 @@ export default function MapView() {
                   style={{ width: '100%', height: '100%' }}
                   className="z-0"
                 >
+                  {/* Recenter map when userLocation changes */}
+                  <RecenterMap center={userLocation} />
+
                   {/* OpenStreetMap tiles */}
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

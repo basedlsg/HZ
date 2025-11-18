@@ -90,11 +90,12 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        // Store session info
+        // Store session info with location
         localStorage.setItem('hotzones-session', JSON.stringify({
           sessionId: data.sessionId,
           token: data.token,
           timestamp: Date.now(),
+          location: { lat, lng }, // Save location for map recentering
         }));
 
         setMessage(`✓ Checked in! Token: ${data.token.substring(0, 12)}...`);
