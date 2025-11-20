@@ -18,6 +18,7 @@ export default function CameraView() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment'); // Default to back camera
+  const isPanicMode = useRef(false); // Track if PANIC was triggered
   const router = useRouter();
 
   useEffect(() => {
@@ -135,6 +136,12 @@ export default function CameraView() {
       if (playbackRef.current) {
         playbackRef.current.src = url;
       }
+
+      // If PANIC mode was triggered, auto-upload immediately
+      if (isPanicMode.current) {
+        isPanicMode.current = false;
+        uploadVideoBlob(blob);
+      }
     };
 
     mediaRecorder.start();
@@ -157,18 +164,73 @@ export default function CameraView() {
     setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
   };
 
-  const panicClose = () => {
-    stopRecording();
-    if (recordedUrl) {
-      URL.revokeObjectURL(recordedUrl);
+  /**
+   * Shared helper to upload a video blob to the server.
+   * Used by both normal Save & Upload flow and PANIC flow.
+   */
+  const uploadVideoBlob = async (blob: Blob) => {
+    try {
+      const sessionData = localStorage.getItem('hotzones-session');
+      const session = sessionData ? JSON.parse(sessionData) : null;
+
+      // Create FormData to send the actual video file
+      const formData = new FormData();
+      formData.append('video', blob, `video-${Date.now()}.webm`);
+      formData.append('sessionId', session?.sessionId || 'unknown');
+      formData.append('duration', recordingTime.toString());
+
+      const response = await fetch('/api/upload-video', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMessage(`✓ Video uploaded! ID: ${data.videoId}`);
+        // Quick exit - navigate to map after brief delay
+        setTimeout(() => {
+          if (recordedUrl) {
+            URL.revokeObjectURL(recordedUrl);
+          }
+          setRecordedBlob(null);
+          setRecordedUrl(null);
+          setMessage('');
+          router.push('/map');
+        }, 500);
+      } else {
+        setMessage(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      setMessage('Failed to upload video');
     }
-    setRecordedBlob(null);
-    setRecordedUrl(null);
-    chunksRef.current = [];
-    setMessage('Recording discarded');
-    setTimeout(() => {
-      router.push('/');
-    }, 500);
+  };
+
+  /**
+   * PANIC CLOSE - Now auto-saves and uploads the current clip instead of discarding it.
+   *
+   * When triggered:
+   * - If currently recording: stops recording and triggers auto-upload via onstop handler
+   * - If already have a blob: uploads it immediately
+   * - Exits quickly to map screen with no additional prompts
+   */
+  const panicClose = () => {
+    setMessage('Saving...');
+
+    if (isRecording) {
+      // Set panic mode flag so onstop handler will auto-upload
+      isPanicMode.current = true;
+      stopRecording();
+    } else if (recordedBlob) {
+      // Already have a blob, upload it immediately
+      uploadVideoBlob(recordedBlob);
+    } else {
+      // No recording to save, just exit
+      setMessage('No recording to save');
+      setTimeout(() => {
+        router.push('/map');
+      }, 500);
+    }
   };
 
   const saveAndUpload = async () => {
@@ -186,13 +248,14 @@ export default function CameraView() {
 
       const response = await fetch('/api/upload-video', {
         method: 'POST',
-        body: formData, // Send FormData (no Content-Type header needed, browser sets it)
+        body: formData,
       });
 
       const data = await response.json();
 
       if (data.success) {
         setMessage(`✓ Video uploaded! ID: ${data.videoId}`);
+        // Normal flow: show success message longer, navigate to videos page
         setTimeout(() => {
           if (recordedUrl) {
             URL.revokeObjectURL(recordedUrl);
@@ -200,7 +263,6 @@ export default function CameraView() {
           setRecordedBlob(null);
           setRecordedUrl(null);
           setMessage('');
-          // Redirect to videos page to see the upload
           router.push('/videos');
         }, 2000);
       } else {
@@ -382,7 +444,7 @@ export default function CameraView() {
             <ul className="text-sm text-gray-400 space-y-1">
               <li>• Videos captured in 16:9 aspect ratio (720p preferred)</li>
               <li>• Preview your recording before uploading</li>
-              <li>• Use PANIC CLOSE to immediately discard recording</li>
+              <li>• Use PANIC CLOSE to immediately save & upload, then exit</li>
               <li>• Recordings stored locally until uploaded</li>
             </ul>
           </div>
