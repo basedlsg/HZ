@@ -220,6 +220,13 @@ class DataStore {
       resolved: 0,
       unclear: 0,
     });
+
+    // Initialize empty vote counts for this video
+    this.votes.set(video.id, {
+      videoId: video.id,
+      upvotes: 0,
+      downvotes: 0,
+    });
   }
 
   getVideo(id: string): VideoUpload | undefined {
