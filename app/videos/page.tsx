@@ -321,8 +321,8 @@ export default function VideosView() {
                   {/* Video Player */}
                   {/*
                     Full-width 16:9 video player.
-                    - AspectVideo enforces 16:9 aspect ratio
-                    - No max-width constraint = expands to full card width
+                    - AspectVideo enforces 16:9 aspect ratio container
+                    - Video fills the entire 16:9 box (absolute positioning)
                     - object-contain preserves aspect ratio without cropping
                     - bg-black prevents white letterboxing
                   */}
@@ -333,7 +333,7 @@ export default function VideosView() {
                           src={video.cloudUrl}
                           controls
                           playsInline
-                          className="w-full h-full object-contain bg-black"
+                          className="absolute inset-0 w-full h-full object-contain bg-black"
                           preload="metadata"
                           crossOrigin="anonymous"
                         />

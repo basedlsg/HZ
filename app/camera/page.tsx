@@ -259,7 +259,7 @@ export default function CameraView() {
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-contain bg-black"
+                className="absolute inset-0 w-full h-full object-contain bg-black"
               />
 
               {/* Recording Indicator */}
@@ -296,7 +296,7 @@ export default function CameraView() {
                 ref={playbackRef}
                 controls
                 playsInline
-                className="w-full h-full object-contain bg-black"
+                className="absolute inset-0 w-full h-full object-contain bg-black"
               />
               <div className="absolute top-4 left-4 bg-green-600 px-3 py-2 rounded-full z-10">
                 <span className="font-semibold text-sm">Preview</span>

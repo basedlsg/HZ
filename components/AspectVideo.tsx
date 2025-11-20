@@ -20,22 +20,19 @@ interface AspectVideoProps {
 
 export default function AspectVideo({ children, className = '' }: AspectVideoProps) {
   return (
-    <div className={`relative bg-gray-900 rounded-lg overflow-hidden ${className}`}>
+    <div className={`bg-gray-900 rounded-lg overflow-hidden ${className}`}>
       {/*
-        16:9 aspect ratio container using the padding-bottom trick.
-        The aspect-video utility from Tailwind is equivalent to:
-        aspect-ratio: 16 / 9
+        16:9 LAYOUT ENFORCED HERE - Full-width responsive 16:9 box.
 
-        This ensures the container maintains 16:9 regardless of parent width.
+        The aspect-video utility creates a 16:9 aspect ratio container.
+        Combined with w-full, it expands to full available width while
+        maintaining the 16:9 ratio.
+
+        The 'relative' positioning ensures absolutely positioned children
+        (video elements, overlays) fill this 16:9 box correctly.
       */}
-      <div className="aspect-video w-full">
-        {/*
-          Children (typically <video> elements) are positioned absolutely
-          to fill the container while maintaining object-fit: cover
-        */}
-        <div className="absolute inset-0">
-          {children}
-        </div>
+      <div className="relative aspect-video w-full">
+        {children}
       </div>
     </div>
   );
