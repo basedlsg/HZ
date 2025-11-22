@@ -3,11 +3,13 @@
  * Coordinates frame extraction, API calls, privacy filtering, and storage.
  */
 
-import { AIVideoMetadata, DEFAULT_LLAMA_CONFIG } from './ai-metadata';
+import { AIVideoMetadata } from './ai-metadata';
 import { extractFramesFromVideo } from './frame-extractor';
-import { analyzFramesWithLlama } from './llama-client';
+import { analyzeFramesWithGemini } from './gemini-client';
 import { validateAIMetadata } from './privacy-filter';
 import { dataStore } from './store';
+
+const GEMINI_MODEL_VERSION = 'gemini-1.5-flash';
 
 /**
  * Analyze a video and store AI-generated metadata.
@@ -34,11 +36,11 @@ export async function analyzeVideo(
 
     console.log(`[AI Analyzer] Extracted ${frames.length} frames`);
 
-    // Step 2: Call Llama Vision API
-    console.log('[AI Analyzer] Calling Llama Vision API...');
-    const analysisResult = await analyzFramesWithLlama(frames);
+    // Step 2: Call Google Gemini Vision API
+    console.log('[AI Analyzer] Calling Google Gemini Vision API...');
+    const analysisResult = await analyzeFramesWithGemini(frames);
 
-    console.log('[AI Analyzer] Received analysis from Llama API');
+    console.log('[AI Analyzer] Received analysis from Gemini API');
 
     // Step 3: Privacy filter
     console.log('[AI Analyzer] Running privacy filter...');
@@ -62,7 +64,7 @@ export async function analyzeVideo(
         activityLevel: 'low',
         confidence: 0,
         analyzedAt: Date.now(),
-        modelVersion: DEFAULT_LLAMA_CONFIG.model,
+        modelVersion: GEMINI_MODEL_VERSION,
         error: {
           code: 'privacy_violation',
           message: `Privacy filter rejected analysis: ${privacyCheck.violations.length} violations detected`,
@@ -83,7 +85,7 @@ export async function analyzeVideo(
       activityLevel: analysisResult.activityLevel,
       confidence: analysisResult.confidence,
       analyzedAt: Date.now(),
-      modelVersion: DEFAULT_LLAMA_CONFIG.model,
+      modelVersion: GEMINI_MODEL_VERSION,
     };
 
     // Step 5: Store in dataStore
@@ -103,7 +105,7 @@ export async function analyzeVideo(
       activityLevel: 'low',
       confidence: 0,
       analyzedAt: Date.now(),
-      modelVersion: DEFAULT_LLAMA_CONFIG.model,
+      modelVersion: GEMINI_MODEL_VERSION,
       error: {
         code: 'analysis_failed',
         message: error instanceof Error ? error.message : 'Unknown error',
