@@ -1,6 +1,7 @@
 // In-memory data store for Hotzones MVP
 
 import { CheckInSession, HeatBubble, ProximalStream, VideoUpload, GeoLocation, ReactionCounts, Comment, ReactionType, VoteCounts, VoteDirection } from './types';
+import { AIVideoMetadata } from './ai-metadata';
 import { calculateDistance } from './utils';
 import { VIDEO_TTL_MS, VIDEO_STORAGE_TTL_MS, ZONE_ASSIGNMENT_MAX_DISTANCE_M, VIDEO_PULSE_WINDOW_MS } from './config';
 
@@ -11,6 +12,7 @@ class DataStore {
   private reactions: Map<string, ReactionCounts> = new Map(); // videoId -> counts
   private comments: Map<string, Comment> = new Map(); // commentId -> comment
   private votes: Map<string, VoteCounts> = new Map(); // videoId -> vote counts
+  private aiMetadata: Map<string, AIVideoMetadata> = new Map(); // videoId -> AI metadata
   // Note: heatBubbles and proximalStreams are generated dynamically, not stored
 
   constructor() {
@@ -423,6 +425,41 @@ class DataStore {
    */
   getVotes(videoId: string): VoteCounts {
     return this.votes.get(videoId) || { videoId, upvotes: 0, downvotes: 0 };
+  }
+
+  // ============================================================================
+  // AI Metadata methods (Optional AI analysis layer)
+  // ============================================================================
+
+  /**
+   * Store AI-generated metadata for a video.
+   * This is an optional layer - videos work without AI metadata.
+   *
+   * @param videoId - The video ID
+   * @param metadata - AI-generated metadata
+   */
+  setAIMetadata(videoId: string, metadata: AIVideoMetadata): void {
+    this.aiMetadata.set(videoId, metadata);
+  }
+
+  /**
+   * Get AI metadata for a video (if available).
+   *
+   * @param videoId - The video ID
+   * @returns AI metadata or null if not analyzed yet
+   */
+  getAIMetadata(videoId: string): AIVideoMetadata | null {
+    return this.aiMetadata.get(videoId) || null;
+  }
+
+  /**
+   * Check if a video has AI metadata (completed analysis).
+   *
+   * @param videoId - The video ID
+   * @returns true if AI metadata exists (success or error)
+   */
+  hasAIMetadata(videoId: string): boolean {
+    return this.aiMetadata.has(videoId);
   }
 }
 

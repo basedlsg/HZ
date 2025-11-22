@@ -3,6 +3,7 @@ import { dataStore } from '@/lib/store';
 import { generateId } from '@/lib/utils';
 import { VideoUpload } from '@/lib/types';
 import { uploadVideoToR2 } from '@/lib/storage';
+import { analyzeVideoAsync } from '@/lib/ai-analyzer';
 
 /**
  * POST /api/upload-video
@@ -77,6 +78,12 @@ export async function POST(request: NextRequest) {
 
     // Store video metadata in memory
     dataStore.addVideo(video);
+
+    // Trigger AI analysis asynchronously (fire-and-forget, non-blocking)
+    // AI analysis will extract frames, call Llama API, and store metadata
+    if (cloudUrl) {
+      analyzeVideoAsync(video.id, cloudUrl);
+    }
 
     return NextResponse.json({
       success: true,
