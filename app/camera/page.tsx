@@ -280,9 +280,9 @@ export default function CameraView() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="border-b border-purple-900/30 bg-black/50 backdrop-blur">
+    <div className="min-h-screen bg-black text-white md:flex md:flex-col">
+      {/* Header - Hidden on mobile, shown on desktop */}
+      <header className="hidden md:block border-b border-purple-900/30 bg-black/50 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
           <Link href="/" className="text-2xl font-bold text-purple-400">
             HOTZONES
@@ -304,39 +304,68 @@ export default function CameraView() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 py-8">
-        <div className="mb-4">
+      {/* Main Content - Full screen on mobile, centered on desktop */}
+      <main className="flex-1 md:mx-auto md:max-w-4xl md:px-4 md:py-8">
+        {/* Title - Hidden on mobile, shown on desktop */}
+        <div className="hidden md:block mb-4">
           <h2 className="text-2xl font-bold mb-1">Secure Camera</h2>
           <p className="text-gray-400 text-sm">Record short video segments in 16:9 format</p>
         </div>
 
-        <div className="space-y-6">
+        {/* Video Container - Full viewport on mobile, aspect ratio on desktop */}
+        <div className="relative h-screen md:h-auto md:space-y-6">
           {/* Video Display - Live Feed or Playback */}
           {!recordedBlob ? (
-            // Live camera feed
-            <AspectVideo>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="absolute inset-0 w-full h-full object-contain bg-black"
-              />
+            // Live camera feed - Full screen on mobile
+            <div className="relative w-full h-full md:h-auto">
+              <div className="md:hidden absolute inset-0 flex items-center justify-center">
+                <div className="relative w-full h-full max-h-screen">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute inset-0 w-full h-full object-cover bg-black"
+                  />
+                </div>
+              </div>
 
-              {/* Recording Indicator */}
+              {/* Desktop view - maintains aspect ratio */}
+              <div className="hidden md:block">
+                <AspectVideo>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute inset-0 w-full h-full object-contain bg-black"
+                  />
+                </AspectVideo>
+              </div>
+
+              {/* Recording Indicator - Overlaid on video */}
               {isRecording && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-2 rounded-full z-10">
+                <div className="absolute top-4 left-4 md:top-4 md:left-4 flex items-center gap-2 bg-red-600 px-3 py-2 rounded-full z-20">
                   <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
                   <span className="font-semibold">{formatTime(recordingTime)}</span>
                 </div>
+              )}
+
+              {/* Back button - Mobile only */}
+              {!isRecording && (
+                <Link
+                  href="/map"
+                  className="md:hidden absolute top-4 left-4 bg-black/50 hover:bg-black/70 backdrop-blur px-4 py-2 rounded-full z-20 transition-colors border border-white/20"
+                >
+                  <span className="font-semibold text-sm">← Back</span>
+                </Link>
               )}
 
               {/* Camera Toggle Button */}
               {!isRecording && hasPermission && (
                 <button
                   onClick={toggleCamera}
-                  className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 backdrop-blur px-4 py-2 rounded-full z-10 transition-colors border border-white/20"
+                  className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 backdrop-blur px-4 py-2 rounded-full z-20 transition-colors border border-white/20"
                 >
                   <span className="font-semibold text-sm">
                     {facingMode === 'user' ? '🔄 Back' : '🔄 Selfie'}
@@ -346,33 +375,50 @@ export default function CameraView() {
 
               {/* No Permission Message */}
               {!hasPermission && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-20">
                   <p className="text-gray-400">Requesting camera access...</p>
                 </div>
               )}
-            </AspectVideo>
+            </div>
           ) : (
-            // Playback preview of recorded video
-            <AspectVideo>
-              <video
-                ref={playbackRef}
-                controls
-                playsInline
-                className="absolute inset-0 w-full h-full object-contain bg-black"
-              />
-              <div className="absolute top-4 left-4 bg-green-600 px-3 py-2 rounded-full z-10">
+            // Playback preview of recorded video - Full screen on mobile
+            <div className="relative w-full h-full md:h-auto">
+              <div className="md:hidden absolute inset-0 flex items-center justify-center">
+                <div className="relative w-full h-full max-h-screen">
+                  <video
+                    ref={playbackRef}
+                    controls
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover bg-black"
+                  />
+                </div>
+              </div>
+
+              {/* Desktop view */}
+              <div className="hidden md:block">
+                <AspectVideo>
+                  <video
+                    ref={playbackRef}
+                    controls
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-contain bg-black"
+                  />
+                </AspectVideo>
+              </div>
+
+              <div className="absolute top-4 left-4 bg-green-600 px-3 py-2 rounded-full z-20">
                 <span className="font-semibold text-sm">Preview</span>
               </div>
-            </AspectVideo>
+            </div>
           )}
 
-          {/* Controls */}
-          <div className="space-y-4">
+          {/* Controls - Overlaid at bottom on mobile, below video on desktop */}
+          <div className="absolute bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto md:space-y-4 p-4 md:p-0 z-30">
             {!isRecording && !recordedBlob && (
               <button
                 onClick={startRecording}
                 disabled={!hasPermission}
-                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-lg transition-colors"
+                className="w-full bg-red-600/90 hover:bg-red-700/90 disabled:bg-gray-700/90 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-full md:rounded-lg transition-colors backdrop-blur-sm"
               >
                 🔴 Start Recording
               </button>
@@ -382,22 +428,22 @@ export default function CameraView() {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={stopRecording}
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-4 px-6 rounded-lg transition-colors"
+                  className="bg-purple-600/90 hover:bg-purple-700/90 text-white font-semibold py-4 px-6 rounded-full md:rounded-lg transition-colors backdrop-blur-sm"
                 >
-                  ⏹️ Stop Recording
+                  ⏹️ Stop
                 </button>
                 <button
                   onClick={panicClose}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-4 px-6 rounded-lg transition-colors"
+                  className="bg-yellow-600/90 hover:bg-yellow-700/90 text-white font-semibold py-4 px-6 rounded-full md:rounded-lg transition-colors backdrop-blur-sm"
                 >
-                  ⚠️ PANIC CLOSE
+                  ⚠️ PANIC
                 </button>
               </div>
             )}
 
             {/* Save & Upload Drawer */}
             {recordedBlob && (
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
+              <div className="bg-gray-900/95 md:bg-gray-900 border border-gray-800 rounded-2xl md:rounded-lg p-6 space-y-4 backdrop-blur-md">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-lg">Recording Ready</h3>
@@ -416,13 +462,13 @@ export default function CameraView() {
                       setRecordedBlob(null);
                       setRecordedUrl(null);
                     }}
-                    className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+                    className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-full md:rounded-lg transition-colors"
                   >
                     Discard
                   </button>
                   <button
                     onClick={saveAndUpload}
-                    className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+                    className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full md:rounded-lg transition-colors"
                   >
                     💾 Save & Upload
                   </button>
@@ -431,15 +477,15 @@ export default function CameraView() {
             )}
           </div>
 
-          {/* Message Display */}
+          {/* Message Display - Overlaid at top on mobile */}
           {message && (
-            <div className={`p-4 rounded-lg ${message.includes('✓') ? 'bg-green-900/20 border border-green-900/30 text-green-400' : 'bg-red-900/20 border border-red-900/30 text-red-400'}`}>
+            <div className={`absolute top-20 left-4 right-4 md:relative md:top-auto md:left-auto md:right-auto p-4 rounded-2xl md:rounded-lg z-30 backdrop-blur-md ${message.includes('✓') ? 'bg-green-900/90 border border-green-900/50 text-green-400' : 'bg-red-900/90 border border-red-900/50 text-red-400'}`}>
               {message}
             </div>
           )}
 
-          {/* Info */}
-          <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+          {/* Info - Hidden on mobile, shown on desktop */}
+          <div className="hidden md:block bg-gray-900/50 border border-gray-800 rounded-lg p-4">
             <h3 className="font-semibold text-sm mb-2">Recording Features</h3>
             <ul className="text-sm text-gray-400 space-y-1">
               <li>• Videos captured in 16:9 aspect ratio (720p preferred)</li>
