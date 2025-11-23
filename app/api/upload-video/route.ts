@@ -12,6 +12,8 @@ import { analyzeVideoAsync } from '@/lib/ai-analyzer';
  * - video: the video file blob
  * - sessionId: user session identifier
  * - duration: recording duration in seconds
+ * - latitude: GPS latitude coordinate (optional, but required for recording)
+ * - longitude: GPS longitude coordinate (optional, but required for recording)
  *
  * Uploads the video to Cloudflare R2 storage and stores metadata in memory.
  */
@@ -22,6 +24,8 @@ export async function POST(request: NextRequest) {
     const videoFile = formData.get('video') as File | null;
     const sessionId = formData.get('sessionId') as string;
     const duration = parseFloat(formData.get('duration') as string);
+    const latitude = formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null;
+    const longitude = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
 
     // Validate inputs
     if (!videoFile) {
@@ -34,6 +38,13 @@ export async function POST(request: NextRequest) {
     if (!sessionId || isNaN(duration)) {
       return NextResponse.json(
         { error: 'Invalid session or duration data' },
+        { status: 400 }
+      );
+    }
+
+    if (latitude === null || longitude === null || isNaN(latitude) || isNaN(longitude)) {
+      return NextResponse.json(
+        { error: 'Location coordinates required to upload video' },
         { status: 400 }
       );
     }
@@ -52,9 +63,8 @@ export async function POST(request: NextRequest) {
       buffer
     );
 
-    // Get session to extract location for zone assignment
-    const session = dataStore.getSession(sessionId);
-    const location = session?.location;
+    // Use the location coordinates from the video recording
+    const location = { lat: latitude, lng: longitude };
 
     // Create video metadata record
     const video: VideoUpload = {
@@ -68,12 +78,10 @@ export async function POST(request: NextRequest) {
       location,
     };
 
-    // Find and assign nearest zone if location available
-    if (location) {
-      const nearestZone = dataStore.findNearestZone(location);
-      if (nearestZone) {
-        video.zoneId = nearestZone.zoneId;
-      }
+    // Find and assign nearest zone based on video's location
+    const nearestZone = dataStore.findNearestZone(location);
+    if (nearestZone) {
+      video.zoneId = nearestZone.zoneId;
     }
 
     // Store video metadata in memory

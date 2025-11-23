@@ -21,6 +21,11 @@ export default function CameraView() {
   const isPanicMode = useRef(false); // Track if PANIC was triggered
   const router = useRouter();
 
+  // Location gating
+  const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
   useEffect(() => {
     startCamera();
     return () => {
@@ -107,8 +112,79 @@ export default function CameraView() {
     }
   };
 
-  const startRecording = () => {
+  /**
+   * Request user's location using Geolocation API.
+   * This must be called before recording can start.
+   */
+  const requestLocation = async () => {
+    if (hasLocationPermission && location) {
+      // Already have location, don't request again
+      return true;
+    }
+
+    if (!navigator.geolocation) {
+      setMessage('Geolocation is not supported by your browser');
+      return false;
+    }
+
+    setIsRequestingLocation(true);
+    setMessage('Requesting location...');
+
+    return new Promise<boolean>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          setLocation(coords);
+          setHasLocationPermission(true);
+          setIsRequestingLocation(false);
+          setMessage('✓ Location shared');
+          setTimeout(() => setMessage(''), 2000);
+          resolve(true);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setIsRequestingLocation(false);
+
+          let errorMessage = 'Failed to get location. ';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'Please enable location permissions.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage += 'Location request timed out.';
+              break;
+            default:
+              errorMessage += 'Unknown error.';
+          }
+          setMessage(errorMessage);
+          resolve(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000, // 5 minutes - allow cached location
+        }
+      );
+    });
+  };
+
+  const startRecording = async () => {
     if (!videoRef.current?.srcObject) return;
+
+    // GATE: Must have location before recording
+    if (!hasLocationPermission || !location) {
+      const granted = await requestLocation();
+      if (!granted) {
+        // Location not granted, can't record
+        return;
+      }
+    }
 
     const stream = videoRef.current.srcObject as MediaStream;
     const mediaRecorder = new MediaRecorder(stream, {
@@ -179,6 +255,12 @@ export default function CameraView() {
       formData.append('sessionId', session?.sessionId || 'unknown');
       formData.append('duration', recordingTime.toString());
 
+      // Include location data
+      if (location) {
+        formData.append('latitude', location.latitude.toString());
+        formData.append('longitude', location.longitude.toString());
+      }
+
       const response = await fetch('/api/upload-video', {
         method: 'POST',
         body: formData,
@@ -245,6 +327,12 @@ export default function CameraView() {
       formData.append('video', recordedBlob, `video-${Date.now()}.webm`);
       formData.append('sessionId', session?.sessionId || 'unknown');
       formData.append('duration', recordingTime.toString());
+
+      // Include location data
+      if (location) {
+        formData.append('latitude', location.latitude.toString());
+        formData.append('longitude', location.longitude.toString());
+      }
 
       const response = await fetch('/api/upload-video', {
         method: 'POST',
@@ -412,16 +500,30 @@ export default function CameraView() {
             </div>
           )}
 
+          {/* Location Status Indicator */}
+          {hasLocationPermission && location && !isRecording && (
+            <div className="absolute top-20 left-4 md:top-4 md:left-4 bg-green-600/90 backdrop-blur px-3 py-2 rounded-full z-20 flex items-center gap-2">
+              <span className="text-sm">📍 Location shared</span>
+            </div>
+          )}
+
           {/* Controls - Overlaid at bottom on mobile, below video on desktop */}
           <div className="absolute bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto md:space-y-4 p-4 md:p-0 z-30">
             {!isRecording && !recordedBlob && (
-              <button
-                onClick={startRecording}
-                disabled={!hasPermission}
-                className="w-full bg-red-600/90 hover:bg-red-700/90 disabled:bg-gray-700/90 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-full md:rounded-lg transition-colors backdrop-blur-sm"
-              >
-                🔴 Start Recording
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={startRecording}
+                  disabled={!hasPermission || isRequestingLocation}
+                  className="w-full bg-red-600/90 hover:bg-red-700/90 disabled:bg-gray-700/90 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-full md:rounded-lg transition-colors backdrop-blur-sm"
+                >
+                  {isRequestingLocation ? '📍 Requesting location...' : '🔴 Start Recording'}
+                </button>
+                {!hasLocationPermission && !isRequestingLocation && (
+                  <p className="text-xs text-gray-400 text-center backdrop-blur-sm bg-black/50 py-2 px-3 rounded-full md:rounded-lg">
+                    Location permission required to record
+                  </p>
+                )}
+              </div>
             )}
 
             {isRecording && (
