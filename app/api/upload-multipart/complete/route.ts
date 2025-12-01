@@ -22,7 +22,18 @@ export async function POST(request: NextRequest) {
         const uploadId = formData.get('uploadId') as string;
         const key = formData.get('key') as string;
         const videoId = formData.get('videoId') as string;
-        const parts = JSON.parse(formData.get('parts') as string);
+        const partsRaw = JSON.parse(formData.get('parts') as string);
+
+        // Ensure parts are sorted by PartNumber and have correct shape
+        const parts = partsRaw
+            .map((p: any) => ({
+                PartNumber: Number(p.PartNumber),
+                ETag: p.ETag.replace(/"/g, ''), // Remove extra quotes if present
+            }))
+            .sort((a: any, b: any) => a.PartNumber - b.PartNumber);
+
+        console.log('[Complete Upload] Parts:', JSON.stringify(parts));
+
         const sessionId = formData.get('sessionId') as string;
         const duration = parseFloat(formData.get('duration') as string);
         const size = parseInt(formData.get('size') as string);
@@ -36,7 +47,8 @@ export async function POST(request: NextRequest) {
             MultipartUpload: { Parts: parts },
         });
 
-        await s3Client.send(command);
+        const completeRes = await s3Client.send(command);
+        console.log('[Complete Upload] S3 Response:', completeRes);
 
         // 2. Run AI Analysis (if image provided)
         let analysisResult = '';
