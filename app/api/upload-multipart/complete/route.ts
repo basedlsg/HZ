@@ -104,7 +104,16 @@ export async function POST(request: NextRequest) {
             if (nearestZone) video.zoneId = nearestZone.zoneId;
         }
 
+        // Save to in-memory store (for immediate use in this instance)
         dataStore.addVideo(video);
+
+        // Save to R2 persistence (for other instances/future requests)
+        try {
+            const { saveVideoToR2 } = await import('@/lib/r2-store');
+            await saveVideoToR2(video);
+        } catch (e) {
+            console.error('Failed to persist video to R2:', e);
+        }
 
         return NextResponse.json({
             success: true,

@@ -1,7 +1,9 @@
+```typescript
 import { NextRequest, NextResponse } from 'next/server';
 import { dataStore } from '@/lib/store';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getVideosFromR2 } from '@/lib/r2-store';
 
 const s3Client = new S3Client({
   region: 'auto',
@@ -25,7 +27,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const zoneId = searchParams.get('zoneId');
 
-    let videos;
+    // Fetch videos from R2 persistence instead of in-memory store
+    let videos = await getVideosFromR2();
+
+    // Apply zoneId filtering if present
     if (zoneId) {
       videos = dataStore.getVideosInZone(zoneId);
     } else {
@@ -44,7 +49,7 @@ export async function GET(request: NextRequest) {
       // Assuming video.filename holds the key (e.g., "video-123.webm")
       let key = video.filename;
       if (!key.startsWith('videos/')) {
-        key = `videos/${key}`;
+        key = `videos / ${ key } `;
       }
 
       try {
