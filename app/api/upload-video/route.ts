@@ -5,6 +5,10 @@ import { VideoUpload } from '@/lib/types';
 import { uploadVideoToR2, getPresignedVideoUrl } from '@/lib/storage';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Increase function timeout and body size limit
+export const maxDuration = 60; // 60 seconds
+export const dynamic = 'force-dynamic';
+
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
 export async function POST(request: NextRequest) {
@@ -58,10 +62,18 @@ export async function POST(request: NextRequest) {
     let analysisResult = '';
     if (analysisImage) {
       try {
+        console.log('[AI Analysis] Starting analysis...');
+        console.log('[AI Analysis] Image size:', analysisImage.size);
+        console.log('[AI Analysis] Image type:', analysisImage.type);
+        console.log('[AI Analysis] API Key present:', !!process.env.GOOGLE_API_KEY);
+
         const analysisPromise = (async () => {
           const imageBuffer = await analysisImage.arrayBuffer();
           const base64Image = Buffer.from(imageBuffer).toString('base64');
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+          console.log('[AI Analysis] Base64 image length:', base64Image.length);
+
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
           const prompt = `
             Analyze this video frame from a security/safety perspective (HotZones app).
@@ -72,12 +84,16 @@ export async function POST(request: NextRequest) {
             Return a concise summary (under 50 words).
           `;
 
+          console.log('[AI Analysis] Sending request to Gemini...');
+
           const result = await model.generateContent([
             prompt,
             { inlineData: { data: base64Image, mimeType: analysisImage.type || 'image/jpeg' } }
           ]);
 
-          return await result.response.text();
+          const text = await result.response.text();
+          console.log('[AI Analysis] Success! Result length:', text.length);
+          return text;
         })();
 
         // Add 30-second timeout to AI analysis
@@ -87,11 +103,19 @@ export async function POST(request: NextRequest) {
 
         analysisResult = await Promise.race([analysisPromise, timeoutPromise]);
       } catch (aiError: any) {
-        console.error('AI Analysis failed during upload:', aiError);
+        console.error('[AI Analysis] FAILED:', {
+          message: aiError.message,
+          stack: aiError.stack,
+          name: aiError.name,
+          code: aiError.code,
+        });
+
         analysisResult = aiError.message === 'AI analysis timeout'
           ? 'Analysis timed out'
-          : 'Analysis failed';
+          : `Analysis failed: ${aiError.message || 'Unknown error'}`;
       }
+    } else {
+      console.log('[AI Analysis] No image provided for analysis');
     }
 
     // Get session to extract location for zone assignment

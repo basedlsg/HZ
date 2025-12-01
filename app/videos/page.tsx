@@ -322,7 +322,7 @@ export default function VideosView() {
                     <div className="mb-4 bg-purple-900/20 border border-purple-500/30 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-purple-400 text-xs font-bold uppercase tracking-wider">
-                          ✨ AI Intelligence Report
+                          AI Intelligence Report
                         </span>
                       </div>
                       <p className="text-gray-200 text-sm font-mono leading-relaxed">
