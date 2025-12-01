@@ -134,19 +134,53 @@ export default function CameraView() {
       setMessage('⚠️ Please check in first');
       return;
     }
-
     const session = JSON.parse(sessionData);
 
     setIsUploading(true);
-    setMessage('Uploading...');
+    setMessage('Initializing upload...');
 
     try {
-      const formData = new FormData();
-      formData.append('video', recordedBlob, `video-${Date.now()}.webm`);
-      formData.append('sessionId', session.sessionId);
-      formData.append('duration', recordingTime.toString());
+      // 1. Initialize Multipart Upload
+      const initRes = await fetch('/api/upload-multipart/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentType: 'video/webm' }),
+      });
 
-      // Capture frame
+      if (!initRes.ok) throw new Error('Failed to init upload');
+      const { uploadId, key, videoId } = await initRes.json();
+
+      // 2. Upload Parts (Chunked)
+      const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks (safe for Vercel)
+      const totalParts = Math.ceil(recordedBlob.size / CHUNK_SIZE);
+      const parts = [];
+
+      for (let i = 0; i < totalParts; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, recordedBlob.size);
+        const chunk = recordedBlob.slice(start, end);
+        const partNumber = i + 1;
+
+        setMessage(`Uploading part ${partNumber}/${totalParts}...`);
+
+        const formData = new FormData();
+        formData.append('uploadId', uploadId);
+        formData.append('key', key);
+        formData.append('partNumber', partNumber.toString());
+        formData.append('body', chunk);
+
+        const partRes = await fetch('/api/upload-multipart/part', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!partRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
+        const { ETag } = await partRes.json();
+        parts.push({ PartNumber: partNumber, ETag });
+      }
+
+      // 3. Capture Analysis Frame
+      let frameBlob: Blob | null = null;
       if (playbackRef.current) {
         const video = playbackRef.current;
         const canvas = document.createElement('canvas');
@@ -155,19 +189,31 @@ export default function CameraView() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-          if (frameBlob) {
-            formData.append('analysisImage', frameBlob, 'frame.jpg');
-          }
+          frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
         }
       }
 
-      const response = await fetch('/api/upload-video', {
+      // 4. Complete Upload & Analyze
+      setMessage('Finalizing & Analyzing...');
+      const completeFormData = new FormData();
+      completeFormData.append('uploadId', uploadId);
+      completeFormData.append('key', key);
+      completeFormData.append('videoId', videoId);
+      completeFormData.append('parts', JSON.stringify(parts));
+      completeFormData.append('sessionId', session.sessionId);
+      completeFormData.append('duration', recordingTime.toString());
+      completeFormData.append('size', recordedBlob.size.toString());
+      if (frameBlob) {
+        completeFormData.append('analysisImage', frameBlob, 'frame.jpg');
+      }
+
+      const completeRes = await fetch('/api/upload-multipart/complete', {
         method: 'POST',
-        body: formData,
+        body: completeFormData,
       });
 
-      const data = await response.json();
+      if (!completeRes.ok) throw new Error('Failed to complete upload');
+      const data = await completeRes.json();
 
       if (data.success) {
         setMessage(`✓ Upload complete!`);
@@ -178,11 +224,12 @@ export default function CameraView() {
           router.push('/videos');
         }, 1500);
       } else {
-        setMessage(`Error: ${data.error}`);
+        throw new Error(data.error || 'Unknown error');
       }
+
     } catch (error: any) {
       console.error('Upload error:', error);
-      setMessage(`Failed: ${error.message || 'Unknown error'}`);
+      setMessage(`Failed: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
