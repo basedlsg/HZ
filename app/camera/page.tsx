@@ -150,8 +150,9 @@ export default function CameraView() {
       if (!initRes.ok) throw new Error('Failed to init upload');
       const { uploadId, key, videoId } = await initRes.json();
 
-      // 2. Upload Parts (Chunked)
-      const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks (safe for Vercel)
+      // 2. Upload Parts (Direct to R2)
+      // S3 requires parts to be at least 5MB (except the last one)
+      const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks to be safe
       const totalParts = Math.ceil(recordedBlob.size / CHUNK_SIZE);
       const parts = [];
 
@@ -163,20 +164,29 @@ export default function CameraView() {
 
         setMessage(`Uploading part ${partNumber}/${totalParts}...`);
 
-        const formData = new FormData();
-        formData.append('uploadId', uploadId);
-        formData.append('key', key);
-        formData.append('partNumber', partNumber.toString());
-        formData.append('body', chunk);
-
-        const partRes = await fetch('/api/upload-multipart/part', {
+        // Get presigned URL for this part
+        const partUrlRes = await fetch('/api/upload-multipart/part', {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadId, key, partNumber }),
         });
 
-        if (!partRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
-        const { ETag } = await partRes.json();
-        parts.push({ PartNumber: partNumber, ETag });
+        if (!partUrlRes.ok) throw new Error(`Failed to get URL for part ${partNumber}`);
+        const { presignedUrl } = await partUrlRes.json();
+
+        // Upload directly to R2
+        const uploadRes = await fetch(presignedUrl, {
+          method: 'PUT',
+          body: chunk,
+        });
+
+        if (!uploadRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
+
+        // Get ETag from R2 response header
+        const eTag = uploadRes.headers.get('ETag');
+        if (!eTag) throw new Error(`No ETag for part ${partNumber}`);
+
+        parts.push({ PartNumber: partNumber, ETag: eTag });
       }
 
       // 3. Capture Analysis Frame
@@ -212,7 +222,11 @@ export default function CameraView() {
         body: completeFormData,
       });
 
-      if (!completeRes.ok) throw new Error('Failed to complete upload');
+      if (!completeRes.ok) {
+        const errData = await completeRes.json();
+        throw new Error(errData.error || 'Failed to complete upload');
+      }
+
       const data = await completeRes.json();
 
       if (data.success) {

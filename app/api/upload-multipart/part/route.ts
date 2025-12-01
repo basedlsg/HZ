@@ -1,5 +1,7 @@
+```typescript
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, UploadPartCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3Client = new S3Client({
     region: 'auto',
@@ -13,34 +15,29 @@ const s3Client = new S3Client({
 
 export async function POST(request: NextRequest) {
     try {
-        const formData = await request.formData();
-        const uploadId = formData.get('uploadId') as string;
-        const key = formData.get('key') as string;
-        const partNumber = parseInt(formData.get('partNumber') as string);
-        const body = formData.get('body') as File;
+        const { uploadId, key, partNumber } = await request.json();
 
-        if (!uploadId || !key || !partNumber || !body) {
+        if (!uploadId || !key || !partNumber) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
-
-        const buffer = Buffer.from(await body.arrayBuffer());
 
         const command = new UploadPartCommand({
             Bucket: process.env.R2_BUCKET || 'hotzones',
             Key: key,
             UploadId: uploadId,
             PartNumber: partNumber,
-            Body: buffer,
         });
 
-        const { ETag } = await s3Client.send(command);
+        // Generate presigned URL for client to upload this part directly
+        const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 600 });
 
         return NextResponse.json({
             success: true,
-            ETag,
+            presignedUrl,
         });
     } catch (error: any) {
-        console.error('Upload part error:', error);
+        console.error('Get part URL error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+```
