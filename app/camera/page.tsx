@@ -145,15 +145,41 @@ export default function CameraView() {
     }
 
     setIsUploading(true);
-    setMessage('Uploading...');
+    setMessage('Uploading to cloud storage...');
 
     try {
-      const formData = new FormData();
-      formData.append('video', recordedBlob, `video-${Date.now()}.webm`);
-      formData.append('sessionId', session.sessionId);
-      formData.append('duration', recordingTime.toString());
+      // Step 1: Get presigned upload URL from server
+      const urlResponse = await fetch('/api/get-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: `video-${Date.now()}.webm`,
+          contentType: 'video/webm',
+        }),
+      });
 
-      // Capture frame for analysis
+      if (!urlResponse.ok) {
+        throw new Error('Failed to get upload URL');
+      }
+
+      const { uploadUrl, videoId } = await urlResponse.json();
+
+      // Step 2: Upload video directly to R2 using presigned URL
+      setMessage('Uploading video...');
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: recordedBlob,
+        headers: {
+          'Content-Type': 'video/webm',
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload to R2 failed: ${uploadResponse.status}`);
+      }
+
+      // Step 3: Capture frame for analysis
+      let frameBlob: Blob | null = null;
       if (playbackRef.current) {
         const video = playbackRef.current;
         const canvas = document.createElement('canvas');
@@ -162,30 +188,31 @@ export default function CameraView() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-          if (frameBlob) {
-            formData.append('analysisImage', frameBlob, 'frame.jpg');
-          }
+          frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
         }
       }
 
-      // Add timeout to upload request (60 seconds)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-      const response = await fetch('/api/upload-video', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      // Step 4: Finalize upload with metadata and analysis
+      setMessage('Processing AI analysis...');
+      const formData = new FormData();
+      formData.append('videoId', videoId);
+      formData.append('sessionId', session.sessionId);
+      formData.append('duration', recordingTime.toString());
+      formData.append('size', recordedBlob.size.toString());
+      if (frameBlob) {
+        formData.append('analysisImage', frameBlob, 'frame.jpg');
       }
 
-      const data = await response.json();
+      const finalizeResponse = await fetch('/api/finalize-upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!finalizeResponse.ok) {
+        throw new Error(`Finalize failed: ${finalizeResponse.status}`);
+      }
+
+      const data = await finalizeResponse.json();
 
       if (data.success) {
         setMessage(`✓ Upload complete! Analysis: ${data.analysisPreview?.substring(0, 20)}...`);
@@ -201,11 +228,7 @@ export default function CameraView() {
       }
     } catch (error: any) {
       console.error('Upload error:', error);
-      if (error.name === 'AbortError') {
-        setMessage('Upload timed out. Please try again with a shorter video.');
-      } else {
-        setMessage(`Failed to upload: ${error.message || 'Unknown error'}`);
-      }
+      setMessage(`Failed to upload: ${error.message || 'Unknown error'}`);
     } finally {
       setIsUploading(false);
     }
