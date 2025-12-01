@@ -31,6 +31,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify session exists and has location
+    const session = dataStore.getSession(sessionId);
+    if (!session || !session.location) {
+      return NextResponse.json(
+        { error: 'Invalid session. Please check in first.' },
+        { status: 403 }
+      );
+    }
+
     // Generate unique video ID
     const videoId = generateId('video');
 
@@ -45,38 +54,49 @@ export async function POST(request: NextRequest) {
       buffer
     );
 
-    // Perform AI Analysis if image provided
+    // Perform AI Analysis if image provided (with timeout)
     let analysisResult = '';
     if (analysisImage) {
       try {
-        const imageBuffer = await analysisImage.arrayBuffer();
-        const base64Image = Buffer.from(imageBuffer).toString('base64');
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const analysisPromise = (async () => {
+          const imageBuffer = await analysisImage.arrayBuffer();
+          const base64Image = Buffer.from(imageBuffer).toString('base64');
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-        const prompt = `
-          Analyze this video frame from a security/safety perspective (HotZones app).
-          Identify:
-          1. Text (OCR) - badge numbers, signs, plates.
-          2. Uniforms/Personnel.
-          3. Hazards or events.
-          Return a concise summary (under 50 words).
-        `;
+          const prompt = `
+            Analyze this video frame from a security/safety perspective (HotZones app).
+            Identify:
+            1. Text (OCR) - badge numbers, signs, plates.
+            2. Uniforms/Personnel.
+            3. Hazards or events.
+            Return a concise summary (under 50 words).
+          `;
 
-        const result = await model.generateContent([
-          prompt,
-          { inlineData: { data: base64Image, mimeType: analysisImage.type || 'image/jpeg' } }
-        ]);
+          const result = await model.generateContent([
+            prompt,
+            { inlineData: { data: base64Image, mimeType: analysisImage.type || 'image/jpeg' } }
+          ]);
 
-        analysisResult = await result.response.text();
-      } catch (aiError) {
+          return await result.response.text();
+        })();
+
+        // Add 30-second timeout to AI analysis
+        const timeoutPromise = new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error('AI analysis timeout')), 30000)
+        );
+
+        analysisResult = await Promise.race([analysisPromise, timeoutPromise]);
+      } catch (aiError: any) {
         console.error('AI Analysis failed during upload:', aiError);
-        analysisResult = 'Analysis failed';
+        analysisResult = aiError.message === 'AI analysis timeout'
+          ? 'Analysis timed out'
+          : 'Analysis failed';
       }
     }
 
     // Get session to extract location for zone assignment
-    const session = dataStore.getSession(sessionId);
-    const location = session?.location;
+    const userSession = dataStore.getSession(sessionId);
+    const location = userSession?.location;
 
     // Create video metadata record
     const video: VideoUpload = {

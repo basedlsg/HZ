@@ -127,18 +127,30 @@ export default function CameraView() {
   };
 
   const saveAndUpload = async () => {
-    if (!recordedBlob || isUploading) return;
+    if (!recordedBlob) return;
+
+    // Check if user has checked in
+    const sessionData = localStorage.getItem('hotzones-session');
+    if (!sessionData) {
+      setMessage('⚠️ Please check in with your location first (go to Home)');
+      return;
+    }
+
+    const session = JSON.parse(sessionData);
+
+    // Validate session has location
+    if (!session.location || !session.location.lat || !session.location.lng) {
+      setMessage('⚠️ Invalid session. Please check in again.');
+      return;
+    }
 
     setIsUploading(true);
-    setMessage('Uploading and analyzing...');
+    setMessage('Uploading...');
 
     try {
-      const sessionData = localStorage.getItem('hotzones-session');
-      const session = sessionData ? JSON.parse(sessionData) : null;
-
       const formData = new FormData();
       formData.append('video', recordedBlob, `video-${Date.now()}.webm`);
-      formData.append('sessionId', session?.sessionId || 'unknown');
+      formData.append('sessionId', session.sessionId);
       formData.append('duration', recordingTime.toString());
 
       // Capture frame for analysis
@@ -157,10 +169,21 @@ export default function CameraView() {
         }
       }
 
+      // Add timeout to upload request (60 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch('/api/upload-video', {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      }
 
       const data = await response.json();
 
@@ -176,9 +199,13 @@ export default function CameraView() {
       } else {
         setMessage(`Error: ${data.error}`);
       }
-    } catch (error) {
-      console.error(error);
-      setMessage('Failed to upload video');
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      if (error.name === 'AbortError') {
+        setMessage('Upload timed out. Please try again with a shorter video.');
+      } else {
+        setMessage(`Failed to upload: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setIsUploading(false);
     }
