@@ -247,21 +247,22 @@ export default function CameraView() {
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Main Video Container - Full Screen */}
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
+      <div className="absolute inset-0 bg-black">
         {!recordedBlob ? (
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover" // object-cover for immersive feel, might crop edges
+            className="w-full h-full object-cover" // object-cover forces full screen fill
           />
         ) : (
           <video
             ref={playbackRef}
             controls
             playsInline
-            className="w-full h-full object-contain bg-black"
+            loop
+            className="w-full h-full object-cover" // object-cover forces full screen fill
           />
         )}
       </div>

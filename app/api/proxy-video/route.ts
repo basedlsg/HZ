@@ -10,24 +10,23 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Get the presigned URL (or we could use GetObjectCommand directly)
+        // Get the presigned URL
         const signedUrl = await getPresignedVideoUrl(videoId);
 
-        // Fetch the video from R2
+        // Fetch from R2
         const response = await fetch(signedUrl);
 
         if (!response.ok) {
+            console.error('Proxy fetch failed:', response.status, response.statusText);
             return new NextResponse(`Failed to fetch video: ${response.statusText}`, { status: response.status });
         }
 
-        // Stream the response back to the client
-        // We forward the Content-Type and Content-Length if available
+        // Forward the video stream with correct headers
         const headers = new Headers();
         headers.set('Content-Type', response.headers.get('Content-Type') || 'video/webm');
-        if (response.headers.get('Content-Length')) {
-            headers.set('Content-Length', response.headers.get('Content-Length')!);
-        }
-        headers.set('Access-Control-Allow-Origin', '*'); // Allow all origins for this proxy
+        headers.set('Content-Length', response.headers.get('Content-Length') || '');
+        headers.set('Access-Control-Allow-Origin', '*');
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
 
         return new NextResponse(response.body, {
             status: 200,
