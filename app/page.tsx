@@ -16,16 +16,22 @@ export default function Home() {
     setMessage('Requesting location access...');
 
     if (!navigator.geolocation) {
-      setMessage('Geolocation is not supported by your browser');
+      setMessage('⚠️ Geolocation not supported. Please use manual coordinates below.');
       setIsLoading(false);
       return;
     }
 
-    // Options for geolocation request
+    // Check if we're on HTTPS (required for geolocation)
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      setMessage('⚠️ Location requires HTTPS. Please use manual coordinates below.');
+      setIsLoading(false);
+      return;
+    }
+
     const options = {
       enableHighAccuracy: true,
-      timeout: 10000, // 10 second timeout
-      maximumAge: 0 // Don't use cached position
+      timeout: 10000,
+      maximumAge: 0
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -35,20 +41,21 @@ export default function Home() {
       (error) => {
         let errorMessage = '';
 
-        switch(error.code) {
+        switch (error.code) {
           case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please enable location permissions in your browser settings and try again.';
+            errorMessage = '⚠️ Location denied. Use manual coordinates below or allow location in browser settings.';
             break;
           case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable. Please check your device settings.';
+            errorMessage = '⚠️ Location unavailable. Use manual coordinates below.';
             break;
           case error.TIMEOUT:
-            errorMessage = 'Location request timed out. Please try again.';
+            errorMessage = '⚠️ Location timed out. Use manual coordinates below.';
             break;
           default:
-            errorMessage = `Error getting location: ${error.message}`;
+            errorMessage = `⚠️ Location error. Use manual coordinates below. (${error.message})`;
         }
 
+        console.log('Location error:', error);
         setMessage(errorMessage);
         setIsLoading(false);
       },
@@ -70,10 +77,9 @@ export default function Home() {
 
   const checkIn = async (lat: number, lng: number) => {
     setIsLoading(true);
-    setMessage('');
+    setMessage('Checking in...');
 
     try {
-      // Get user profile from localStorage
       const profileData = localStorage.getItem('hotzones-profile');
       const profile = profileData ? JSON.parse(profileData) : null;
 
@@ -90,25 +96,24 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        // Store session info with location
         localStorage.setItem('hotzones-session', JSON.stringify({
           sessionId: data.sessionId,
           token: data.token,
           timestamp: Date.now(),
-          location: { lat, lng }, // Save location for map recentering
+          location: { lat, lng },
         }));
 
-        setMessage(`✓ Checked in! Token: ${data.token.substring(0, 12)}...`);
+        setMessage(`✓ Checked in! You can now record videos.`);
 
-        // Redirect to map after 1 second
+        // Don't auto-redirect - let user navigate
         setTimeout(() => {
-          router.push('/map');
-        }, 1000);
+          setMessage('✓ Ready! Go to Camera to record.');
+        }, 1500);
       } else {
         setMessage(`Error: ${data.error}`);
       }
     } catch (error) {
-      setMessage('Failed to check in');
+      setMessage('Failed to check in. Please try again.');
     } finally {
       setIsLoading(false);
     }
