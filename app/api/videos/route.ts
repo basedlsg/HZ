@@ -28,9 +28,10 @@ export async function GET(request: NextRequest) {
       const votes = dataStore.getVotes(video.id);
 
       // Use direct R2 public URL (CORS is now fixed)
+      // Use direct R2 public URL (CORS is now fixed)
       // If cloudUrl is already a full URL, use it. Otherwise construct it.
-      let videoUrl = video.cloudUrl;
-      if (!videoUrl.startsWith('http')) {
+      let videoUrl = video.cloudUrl || '';
+      if (videoUrl && !videoUrl.startsWith('http')) {
         videoUrl = `${process.env.R2_PUBLIC_BASE_URL}/${video.cloudUrl}`;
       }
 
