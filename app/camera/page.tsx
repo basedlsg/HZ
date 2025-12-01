@@ -129,57 +129,24 @@ export default function CameraView() {
   const saveAndUpload = async () => {
     if (!recordedBlob) return;
 
-    // Check if user has checked in
     const sessionData = localStorage.getItem('hotzones-session');
     if (!sessionData) {
-      setMessage('⚠️ Please check in with your location first (go to Home)');
+      setMessage('⚠️ Please check in first');
       return;
     }
 
     const session = JSON.parse(sessionData);
 
-    // Validate session has location
-    if (!session.location || !session.location.lat || !session.location.lng) {
-      setMessage('⚠️ Invalid session. Please check in again.');
-      return;
-    }
-
     setIsUploading(true);
-    setMessage('Uploading to cloud storage...');
+    setMessage('Uploading...');
 
     try {
-      // Step 1: Get presigned upload URL from server
-      const urlResponse = await fetch('/api/get-upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: `video-${Date.now()}.webm`,
-          contentType: 'video/webm',
-        }),
-      });
+      const formData = new FormData();
+      formData.append('video', recordedBlob, `video-${Date.now()}.webm`);
+      formData.append('sessionId', session.sessionId);
+      formData.append('duration', recordingTime.toString());
 
-      if (!urlResponse.ok) {
-        throw new Error('Failed to get upload URL');
-      }
-
-      const { uploadUrl, videoId } = await urlResponse.json();
-
-      // Step 2: Upload video directly to R2 using presigned URL
-      setMessage('Uploading video...');
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: recordedBlob,
-        headers: {
-          'Content-Type': 'video/webm',
-        },
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload to R2 failed: ${uploadResponse.status}`);
-      }
-
-      // Step 3: Capture frame for analysis
-      let frameBlob: Blob | null = null;
+      // Capture frame
       if (playbackRef.current) {
         const video = playbackRef.current;
         const canvas = document.createElement('canvas');
@@ -188,47 +155,34 @@ export default function CameraView() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+          const frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+          if (frameBlob) {
+            formData.append('analysisImage', frameBlob, 'frame.jpg');
+          }
         }
       }
 
-      // Step 4: Finalize upload with metadata and analysis
-      setMessage('Processing AI analysis...');
-      const formData = new FormData();
-      formData.append('videoId', videoId);
-      formData.append('sessionId', session.sessionId);
-      formData.append('duration', recordingTime.toString());
-      formData.append('size', recordedBlob.size.toString());
-      if (frameBlob) {
-        formData.append('analysisImage', frameBlob, 'frame.jpg');
-      }
-
-      const finalizeResponse = await fetch('/api/finalize-upload', {
+      const response = await fetch('/api/upload-video', {
         method: 'POST',
         body: formData,
       });
 
-      if (!finalizeResponse.ok) {
-        throw new Error(`Finalize failed: ${finalizeResponse.status}`);
-      }
-
-      const data = await finalizeResponse.json();
+      const data = await response.json();
 
       if (data.success) {
-        setMessage(`✓ Upload complete! Analysis: ${data.analysisPreview?.substring(0, 20)}...`);
+        setMessage(`✓ Upload complete!`);
         setTimeout(() => {
           if (recordedUrl) URL.revokeObjectURL(recordedUrl);
           setRecordedBlob(null);
           setRecordedUrl(null);
-          setMessage('');
           router.push('/videos');
-        }, 2000);
+        }, 1500);
       } else {
         setMessage(`Error: ${data.error}`);
       }
     } catch (error: any) {
       console.error('Upload error:', error);
-      setMessage(`Failed to upload: ${error.message || 'Unknown error'}`);
+      setMessage(`Failed: ${error.message || 'Unknown error'}`);
     } finally {
       setIsUploading(false);
     }
