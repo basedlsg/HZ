@@ -22,37 +22,44 @@ export async function GET(request: NextRequest) {
     }
 
     // Include reactions, comments count, vote counts, and signed URLs
-    const videosWithMeta = await Promise.all(videos.map(async (video) => {
+    const videosWithSignedUrls = await Promise.all(videos.map(async (video) => {
       const reactions = dataStore.getReactions(video.id);
       const comments = dataStore.getCommentsForVideo(video.id);
       const votes = dataStore.getVotes(video.id);
 
-      // Use direct R2 public URL (CORS is now fixed)
-      // Use direct R2 public URL (CORS is now fixed)
-      // If cloudUrl is already a full URL, use it. Otherwise construct it.
-      let videoUrl = video.cloudUrl || '';
-      if (videoUrl && !videoUrl.startsWith('http')) {
-        videoUrl = `${process.env.R2_PUBLIC_BASE_URL}/${video.cloudUrl}`;
+      let signedUrl = video.cloudUrl; // Fallback to existing cloudUrl if signing fails or isn't needed
+
+      // We need to extract the key from the video object.
+      // Assuming video.filename holds the key (e.g., "video-123.webm")
+      let key = video.filename;
+      if (!key.startsWith('videos/')) {
+        key = `videos/${key}`;
       }
 
-      // Fallback if cloudUrl is just the key
-      if (!videoUrl.includes(process.env.R2_PUBLIC_BASE_URL || '')) {
-        videoUrl = `${process.env.R2_PUBLIC_BASE_URL}/videos/${video.id}.webm`;
+      try {
+        const command = new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET || 'hotzones', // Use R2_BUCKET from env or default
+          Key: key,
+        });
+        // Generate a presigned URL valid for 1 hour (3600 seconds)
+        signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      } catch (e) {
+        console.error('Failed to sign URL for', key, e);
+        // Fallback to existing URL or an empty string if signing fails
+        // The original cloudUrl might be a direct public URL, so keep it as a fallback.
+        signedUrl = video.cloudUrl || '';
       }
 
       return {
         ...video,
-        cloudUrl: videoUrl,
+        cloudUrl: signedUrl,
         reactionCounts: reactions,
         commentCount: comments.length,
         voteCounts: votes,
       };
     }));
 
-    return NextResponse.json({
-      success: true,
-      videos: videosWithMeta,
-    });
+    return NextResponse.json(videosWithSignedUrls);
   } catch (error) {
     console.error('Get videos error:', error);
     return NextResponse.json(
