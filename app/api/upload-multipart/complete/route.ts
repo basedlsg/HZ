@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
             duration,
             size,
             filename: `${videoId}.webm`,
-            cloudUrl: `/api/proxy-video?id=${videoId}`, // Use proxy for playback
+            cloudUrl: `${process.env.R2_PUBLIC_BASE_URL}/videos/${videoId}.webm`, // Direct R2 URL
             location,
             analysis: analysisResult || undefined,
         };

@@ -27,12 +27,21 @@ export async function GET(request: NextRequest) {
       const comments = dataStore.getCommentsForVideo(video.id);
       const votes = dataStore.getVotes(video.id);
 
-      // Use local proxy URL to bypass CORS issues with R2
-      const proxyUrl = `/api/proxy-video?id=${video.id}`;
+      // Use direct R2 public URL (CORS is now fixed)
+      // If cloudUrl is already a full URL, use it. Otherwise construct it.
+      let videoUrl = video.cloudUrl;
+      if (!videoUrl.startsWith('http')) {
+        videoUrl = `${process.env.R2_PUBLIC_BASE_URL}/${video.cloudUrl}`;
+      }
+
+      // Fallback if cloudUrl is just the key
+      if (!videoUrl.includes(process.env.R2_PUBLIC_BASE_URL || '')) {
+        videoUrl = `${process.env.R2_PUBLIC_BASE_URL}/videos/${video.id}.webm`;
+      }
 
       return {
         ...video,
-        cloudUrl: proxyUrl,
+        cloudUrl: videoUrl,
         reactionCounts: reactions,
         commentCount: comments.length,
         voteCounts: votes,
