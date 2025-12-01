@@ -141,13 +141,13 @@ export async function POST(request: NextRequest) {
     // Store video metadata in memory
     dataStore.addVideo(video);
 
-    // Generate presigned URL for immediate playback
-    const signedUrl = await getPresignedVideoUrl(videoId);
+    // Use proxy URL for response (works on serverless)
+    const proxyUrl = `/api/proxy-video?id=${videoId}`;
 
     return NextResponse.json({
       success: true,
       videoId: video.id,
-      cloudUrl: signedUrl,
+      cloudUrl: proxyUrl,
       analysisPreview: analysisResult,
       message: 'Video uploaded and analyzed successfully',
     });
