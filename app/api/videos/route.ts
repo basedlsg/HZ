@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       // Assuming video.filename holds the key (e.g., "video-123.webm")
       let key = video.filename;
       if (!key.startsWith('videos/')) {
-        key = `videos / ${key} `;
+        key = `videos/${key}`;
       }
 
       try {
