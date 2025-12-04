@@ -46,6 +46,13 @@ export default function CameraView() {
 
   const startCamera = async () => {
     addLog('Starting camera init...');
+
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      addLog('FATAL: Not Secure Context (HTTPS required)');
+      setMessage('HTTPS Required');
+      return;
+    }
+
     try {
       let stream;
       try {
@@ -73,9 +80,12 @@ export default function CameraView() {
         addLog('Video ref found, assigning stream...');
         videoRef.current.srcObject = stream;
 
+        // Add listeners
         videoRef.current.onloadedmetadata = () => {
           addLog(`Metadata loaded. Size: ${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}`);
         };
+        videoRef.current.oncanplay = () => addLog('Video can play');
+        videoRef.current.onerror = (e) => addLog(`Video Error: ${(e.target as HTMLVideoElement).error?.message}`);
 
         try {
           await videoRef.current.play();
