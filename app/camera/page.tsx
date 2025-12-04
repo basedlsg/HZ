@@ -41,11 +41,15 @@ export default function CameraView() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const addLog = (msg: string) => setDebugLogs(prev => [...prev.slice(-4), msg]);
+
   const startCamera = async () => {
+    addLog('Starting camera init...');
     try {
       let stream;
       try {
-        // 1. Try ideal portrait 1080p
+        addLog('Requesting ideal constraints...');
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: facingMode,
@@ -55,25 +59,40 @@ export default function CameraView() {
           },
           audio: true,
         });
+        addLog('Ideal constraints success');
       } catch (e) {
-        console.warn('Ideal constraints failed, trying basic...', e);
-        // 2. Fallback to basic (any resolution)
+        addLog('Ideal failed, trying basic...');
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facingMode },
           audio: true,
         });
+        addLog('Basic constraints success');
       }
 
       if (videoRef.current) {
+        addLog('Video ref found, assigning stream...');
         videoRef.current.srcObject = stream;
-        // Explicitly call play() to ensure it starts
-        videoRef.current.play().catch(e => console.error("Video play failed:", e));
-        setHasPermission(true);
-        setMessage('');
+
+        videoRef.current.onloadedmetadata = () => {
+          addLog(`Metadata loaded. Size: ${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}`);
+        };
+
+        try {
+          await videoRef.current.play();
+          addLog('Video playing!');
+          setHasPermission(true);
+          setMessage('');
+        } catch (playError: any) {
+          addLog(`Play failed: ${playError.message}`);
+          console.error("Video play failed:", playError);
+        }
+      } else {
+        addLog('Error: Video ref is null');
       }
     } catch (error: any) {
       console.error('Error accessing camera:', error);
-      setMessage(`Camera Error: ${error.name} - ${error.message}. Check permissions.`);
+      addLog(`Fatal Error: ${error.name} - ${error.message}`);
+      setMessage(`Camera Error: ${error.name} - ${error.message}`);
     }
   };
 
@@ -299,6 +318,11 @@ export default function CameraView() {
     <div className="fixed inset-0 bg-black text-white overflow-hidden z-50">
       {/* Hidden canvas for OCR */}
       <canvas ref={canvasRef} className="hidden" />
+
+      {/* Debug Logs Overlay */}
+      <div className="absolute top-20 left-4 z-50 pointer-events-none text-xs text-green-400 font-mono bg-black/50 p-2 rounded">
+        {debugLogs.map((log, i) => <div key={i}>{log}</div>)}
+      </div>
 
       {/* Main Video Container - Full Screen */}
       <div className="absolute inset-0 bg-black">
