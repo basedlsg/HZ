@@ -43,24 +43,37 @@ export default function CameraView() {
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: facingMode,
-          aspectRatio: { ideal: 9 / 16 },
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-        },
-        audio: true,
-      });
+      let stream;
+      try {
+        // 1. Try ideal portrait 1080p
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: facingMode,
+            aspectRatio: { ideal: 9 / 16 },
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+          },
+          audio: true,
+        });
+      } catch (e) {
+        console.warn('Ideal constraints failed, trying basic...', e);
+        // 2. Fallback to basic (any resolution)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: true,
+        });
+      }
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Explicitly call play() to ensure it starts
+        videoRef.current.play().catch(e => console.error("Video play failed:", e));
         setHasPermission(true);
         setMessage('');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accessing camera:', error);
-      setMessage('Failed to access camera. Please grant permissions.');
+      setMessage(`Camera Error: ${error.name} - ${error.message}. Check permissions.`);
     }
   };
 
