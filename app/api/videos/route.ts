@@ -1,4 +1,3 @@
-```typescript
 import { NextRequest, NextResponse } from 'next/server';
 import { dataStore } from '@/lib/store';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
       // Assuming video.filename holds the key (e.g., "video-123.webm")
       let key = video.filename;
       if (!key.startsWith('videos/')) {
-        key = `videos / ${ key } `;
+        key = `videos / ${key} `;
       }
 
       try {
