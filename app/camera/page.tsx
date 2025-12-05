@@ -9,193 +9,194 @@ export default function CameraView() {
   const playbackRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'recording' | 'preview' | 'uploading' | 'error'>('loading');
   const [recordingTime, setRecordingTime] = useState(0);
-  const [message, setMessage] = useState('');
-  const [hasPermission, setHasPermission] = useState(false);
+  const [message, setMessage] = useState('Initializing camera...');
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [mimeType, setMimeType] = useState<string>('video/webm');
+  const [debugLogs, setDebugLogs] = useState<string[]>(['Camera page loaded']);
 
   const router = useRouter();
 
+  const addLog = (msg: string) => {
+    console.log('[Camera]', msg);
+    setDebugLogs(prev => [...prev.slice(-6), `${new Date().toLocaleTimeString()}: ${msg}`]);
+  };
+
+  // Detect MIME type on mount
+  useEffect(() => {
+    addLog('Detecting MIME type...');
+    const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm', 'video/webm;codecs=vp8'];
+    for (const type of types) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+        setMimeType(type);
+        addLog(`MIME: ${type}`);
+        break;
+      }
+    }
+  }, []);
+
+  // Start camera on mount and when facingMode changes
   useEffect(() => {
     startCamera();
-    return () => {
-      stopCamera();
-      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    };
+    return () => stopCamera();
   }, [facingMode]);
 
+  // Recording timer
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isRecording) {
-      interval = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
-      }, 1000);
+    if (status === 'recording') {
+      interval = setInterval(() => setRecordingTime(t => t + 1), 1000);
     }
     return () => clearInterval(interval);
-  }, [isRecording]);
-
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => setDebugLogs(prev => [...prev.slice(-4), msg]);
+  }, [status]);
 
   const startCamera = async () => {
-    addLog('Starting camera init...');
+    addLog('startCamera() called');
+    setStatus('loading');
+    setMessage('Requesting camera access...');
 
+    // Check secure context
     if (typeof window !== 'undefined' && !window.isSecureContext) {
-      addLog('FATAL: Not Secure Context (HTTPS required)');
-      setMessage('HTTPS Required');
+      addLog('ERROR: Not secure context');
+      setStatus('error');
+      setMessage('HTTPS is required for camera access');
+      return;
+    }
+
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      addLog('ERROR: getUserMedia not available');
+      setStatus('error');
+      setMessage('Camera API not available on this device');
       return;
     }
 
     try {
+      addLog('Requesting stream...');
+
+      // Try with simple constraints first (more compatible)
       let stream;
       try {
-        addLog('Requesting ideal constraints...');
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: facingMode,
-            aspectRatio: { ideal: 9 / 16 },
-            width: { ideal: 1080 },
-            height: { ideal: 1920 },
-          },
-          audio: true,
-        });
-        addLog('Ideal constraints success');
-      } catch (e) {
-        addLog('Ideal failed, trying basic...');
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facingMode },
           audio: true,
         });
-        addLog('Basic constraints success');
+        addLog('Got stream with basic constraints');
+      } catch (e: any) {
+        addLog(`Basic failed: ${e.message}, trying video-only...`);
+        // Try without audio as fallback
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: false,
+        });
+        addLog('Got stream without audio');
       }
 
-      if (videoRef.current) {
-        addLog('Video ref found, assigning stream...');
-        videoRef.current.srcObject = stream;
-
-        // Add listeners
-        videoRef.current.onloadedmetadata = () => {
-          addLog(`Metadata loaded. Size: ${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}`);
-        };
-        videoRef.current.oncanplay = () => addLog('Video can play');
-        videoRef.current.onerror = (e) => addLog(`Video Error: ${(e.target as HTMLVideoElement).error?.message}`);
-
-        try {
-          await videoRef.current.play();
-          addLog('Video playing!');
-          setHasPermission(true);
-          setMessage('');
-        } catch (playError: any) {
-          addLog(`Play failed: ${playError.message}`);
-          console.error("Video play failed:", playError);
-        }
-      } else {
-        addLog('Error: Video ref is null');
+      if (!videoRef.current) {
+        addLog('ERROR: videoRef is null');
+        setStatus('error');
+        setMessage('Video element not found');
+        return;
       }
+
+      addLog('Setting srcObject...');
+      videoRef.current.srcObject = stream;
+
+      // Wait for video to be ready
+      videoRef.current.onloadedmetadata = () => {
+        addLog(`Metadata loaded: ${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}`);
+      };
+
+      videoRef.current.oncanplay = () => {
+        addLog('canplay event fired');
+      };
+
+      // Try to play
+      addLog('Calling play()...');
+      await videoRef.current.play();
+      addLog('Video playing successfully!');
+
+      setStatus('ready');
+      setMessage('');
+
     } catch (error: any) {
-      console.error('Error accessing camera:', error);
-      addLog(`Fatal Error: ${error.name} - ${error.message}`);
-      setMessage(`Camera Error: ${error.name} - ${error.message}`);
+      addLog(`ERROR: ${error.name} - ${error.message}`);
+      setStatus('error');
+      setMessage(`Camera Error: ${error.message}`);
     }
   };
 
   const stopCamera = () => {
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
+      stream.getTracks().forEach(track => track.stop());
+      addLog('Camera stopped');
     }
   };
 
-  const [mimeType, setMimeType] = useState<string>('video/webm');
-
-  useEffect(() => {
-    // Detect supported MIME type
-    const types = [
-      'video/mp4',
-      'video/webm;codecs=vp9',
-      'video/webm',
-      'video/webm;codecs=vp8',
-    ];
-
-    for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        setMimeType(type);
-        console.log('Using MIME type:', type);
-        break;
-      }
-    }
-  }, []);
-
   const startRecording = () => {
-    if (!videoRef.current?.srcObject) return;
+    if (!videoRef.current?.srcObject) {
+      addLog('Cannot record: no stream');
+      return;
+    }
 
+    addLog('Starting recording...');
     const stream = videoRef.current.srcObject as MediaStream;
 
     try {
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: mimeType,
-      });
-
-      mediaRecorderRef.current = mediaRecorder;
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      mediaRecorder.onstop = () => {
+      recorder.onstop = () => {
+        addLog('Recording stopped');
         const blob = new Blob(chunksRef.current, { type: mimeType });
         setRecordedBlob(blob);
         const url = URL.createObjectURL(blob);
         setRecordedUrl(url);
-        if (playbackRef.current) {
-          playbackRef.current.src = url;
-        }
+        setStatus('preview');
       };
 
-      mediaRecorder.start();
-      setIsRecording(true);
+      recorder.start();
+      setStatus('recording');
       setRecordingTime(0);
-    } catch (e) {
-      console.error('Failed to start recording:', e);
-      setMessage('Failed to start recording. Device not supported?');
+      addLog('Recording started');
+    } catch (e: any) {
+      addLog(`Record error: ${e.message}`);
+      setMessage(`Recording failed: ${e.message}`);
     }
   };
 
-
-
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && status === 'recording') {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
+      addLog('Stopping recording...');
     }
+  };
+
+  const discardRecording = () => {
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    setRecordedBlob(null);
+    setRecordedUrl(null);
+    setStatus('ready');
+    addLog('Recording discarded');
   };
 
   const toggleCamera = () => {
     stopCamera();
-    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+    setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+    addLog(`Switching to ${facingMode === 'user' ? 'back' : 'front'} camera`);
   };
 
-  const panicClose = () => {
-    stopRecording();
-    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    setRecordedBlob(null);
-    setRecordedUrl(null);
-    chunksRef.current = [];
-    setMessage('Recording discarded');
-    setTimeout(() => router.push('/'), 500);
-  };
-
-  const saveAndUpload = async () => {
+  const uploadVideo = async () => {
     if (!recordedBlob) return;
 
     const sessionData = localStorage.getItem('hotzones-session');
@@ -205,270 +206,182 @@ export default function CameraView() {
     }
     const session = JSON.parse(sessionData);
 
-    setIsUploading(true);
-    setMessage('Initializing upload...');
+    setStatus('uploading');
+    setMessage('Uploading...');
+    addLog('Starting upload...');
 
     try {
-      // 1. Initialize Multipart Upload
+      // 1. Init multipart
       const initRes = await fetch('/api/upload-multipart/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contentType: mimeType }),
       });
-
-      if (!initRes.ok) throw new Error('Failed to init upload');
+      if (!initRes.ok) throw new Error('Init failed');
       const { uploadId, key, videoId } = await initRes.json();
+      addLog('Upload initialized');
 
-      // 2. Upload Parts (Direct to R2)
-      // S3 requires parts to be at least 5MB (except the last one)
-      const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks to be safe
+      // 2. Upload parts
+      const CHUNK_SIZE = 6 * 1024 * 1024;
       const totalParts = Math.ceil(recordedBlob.size / CHUNK_SIZE);
       const parts = [];
 
       for (let i = 0; i < totalParts; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, recordedBlob.size);
-        const chunk = recordedBlob.slice(start, end);
+        const chunk = recordedBlob.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, recordedBlob.size));
         const partNumber = i + 1;
+        setMessage(`Uploading ${partNumber}/${totalParts}...`);
 
-        setMessage(`Uploading part ${partNumber}/${totalParts}...`);
-
-        // Get presigned URL for this part
-        const partUrlRes = await fetch('/api/upload-multipart/part', {
+        const partRes = await fetch('/api/upload-multipart/part', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ uploadId, key, partNumber }),
         });
+        if (!partRes.ok) throw new Error(`Part ${partNumber} URL failed`);
+        const { presignedUrl } = await partRes.json();
 
-        if (!partUrlRes.ok) throw new Error(`Failed to get URL for part ${partNumber}`);
-        const { presignedUrl } = await partUrlRes.json();
+        const uploadRes = await fetch(presignedUrl, { method: 'PUT', body: chunk });
+        if (!uploadRes.ok) throw new Error(`Part ${partNumber} upload failed`);
 
-        // Upload directly to R2
-        const uploadRes = await fetch(presignedUrl, {
-          method: 'PUT',
-          body: chunk,
-        });
-
-        if (!uploadRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
-
-        // Get ETag from R2 response header
         const eTag = uploadRes.headers.get('ETag');
         if (!eTag) throw new Error(`No ETag for part ${partNumber}`);
-
         parts.push({ PartNumber: partNumber, ETag: eTag });
+        addLog(`Part ${partNumber}/${totalParts} done`);
       }
 
-      // 3. Capture Analysis Frame
-      let frameBlob: Blob | null = null;
-      if (playbackRef.current) {
-        const video = playbackRef.current;
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          frameBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-        }
-      }
+      // 3. Complete
+      setMessage('Finalizing...');
+      const formData = new FormData();
+      formData.append('uploadId', uploadId);
+      formData.append('key', key);
+      formData.append('videoId', videoId);
+      formData.append('parts', JSON.stringify(parts));
+      formData.append('sessionId', session.sessionId);
+      formData.append('duration', recordingTime.toString());
+      formData.append('size', recordedBlob.size.toString());
 
-      // 4. Complete Upload & Analyze
-      setMessage('Finalizing & Analyzing...');
-      const completeFormData = new FormData();
-      completeFormData.append('uploadId', uploadId);
-      completeFormData.append('key', key);
-      completeFormData.append('videoId', videoId);
-      completeFormData.append('parts', JSON.stringify(parts));
-      completeFormData.append('sessionId', session.sessionId);
-      completeFormData.append('duration', recordingTime.toString());
-      completeFormData.append('size', recordedBlob.size.toString());
-      if (frameBlob) {
-        completeFormData.append('analysisImage', frameBlob, 'frame.jpg');
-      }
+      const completeRes = await fetch('/api/upload-multipart/complete', { method: 'POST', body: formData });
+      if (!completeRes.ok) throw new Error('Complete failed');
 
-      const completeRes = await fetch('/api/upload-multipart/complete', {
-        method: 'POST',
-        body: completeFormData,
-      });
-
-      if (!completeRes.ok) {
-        const errData = await completeRes.json();
-        throw new Error(errData.error || 'Failed to complete upload');
-      }
-
-      const data = await completeRes.json();
-
-      if (data.success) {
-        setMessage(`✓ Upload complete!`);
-        setTimeout(() => {
-          if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-          setRecordedBlob(null);
-          setRecordedUrl(null);
-          router.push('/videos');
-        }, 1500);
-      } else {
-        throw new Error(data.error || 'Unknown error');
-      }
+      addLog('Upload complete!');
+      setMessage('✓ Uploaded!');
+      setTimeout(() => router.push('/videos'), 1500);
 
     } catch (error: any) {
-      console.error('Upload error:', error);
-      setMessage(`Failed: ${error.message}`);
-    } finally {
-      setIsUploading(false);
+      addLog(`Upload error: ${error.message}`);
+      setMessage(`Upload failed: ${error.message}`);
+      setStatus('preview');
     }
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
-    <div className="fixed inset-0 bg-black text-white overflow-hidden z-50">
-      {/* Hidden canvas for OCR */}
-      <canvas ref={canvasRef} className="hidden" />
+    <div className="fixed inset-0 bg-black text-white flex flex-col">
 
-      {/* Debug Logs Overlay */}
-      <div className="absolute top-20 left-4 z-50 pointer-events-none text-xs text-green-400 font-mono bg-black/50 p-2 rounded">
-        {debugLogs.map((log, i) => <div key={i}>{log}</div>)}
-      </div>
-
-      {/* Main Video Container - Full Screen */}
-      <div className="absolute inset-0 bg-black">
-        {!recordedBlob ? (
+      {/* Video Area */}
+      <div className="flex-1 relative bg-gray-900">
+        {status !== 'preview' ? (
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover" // object-cover forces full screen fill
+            className="absolute inset-0 w-full h-full object-cover"
           />
-        ) : (
+        ) : recordedUrl ? (
           <video
             ref={playbackRef}
+            src={recordedUrl}
             controls
             playsInline
             loop
-            className="w-full h-full object-cover" // object-cover forces full screen fill
+            className="absolute inset-0 w-full h-full object-contain bg-black"
           />
-        )}
-      </div>
+        ) : null}
 
-      {/* Top Overlay: Header & Status */}
-      <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent z-10">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-purple-400 drop-shadow-md">
-            HOTZONES
-          </Link>
-
-          {isRecording && (
-            <div className="flex items-center gap-2 bg-red-600/80 backdrop-blur px-3 py-1 rounded-full animate-pulse">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-              <span className="font-mono font-bold text-sm">{formatTime(recordingTime)}</span>
-            </div>
-          )}
-
-          <div className="flex gap-4">
-            {!isRecording && !recordedBlob && (
-              <button
-                onClick={toggleCamera}
-                className="p-2 rounded-full bg-black/40 backdrop-blur border border-white/20"
-              >
-                🔄
-              </button>
-            )}
-            <button onClick={() => router.push('/')} className="text-white/80 hover:text-white text-2xl">
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {/* Message Toast */}
-        {message && (
-          <div className="mt-4 flex justify-center">
-            <div className="bg-black/60 backdrop-blur px-4 py-2 rounded-lg text-sm font-medium border border-white/10">
-              {message}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-8 pb-12 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10">
-
-        {!recordedBlob ? (
-          <div className="flex flex-col items-center gap-6">
-            {/* Action Bar */}
-            {!isRecording && (
-              <div className="flex items-center gap-8 mb-4">
-                <Link href="/videos" className="flex flex-col items-center gap-1 text-gray-300 hover:text-white transition-colors">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center border border-white/20 bg-black/40 backdrop-blur">
-                    📹
-                  </div>
-                  <span className="text-xs font-medium">Library</span>
-                </Link>
-              </div>
-            )}
-
-            {/* Main Shutter Button */}
-            <div className="flex items-center justify-center">
-              {!isRecording ? (
-                <button
-                  onClick={startRecording}
-                  className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-                >
-                  <div className="w-16 h-16 bg-red-600 rounded-full"></div>
-                </button>
-              ) : (
-                <button
-                  onClick={stopRecording}
-                  className="w-20 h-20 rounded-full border-4 border-white/50 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-                >
-                  <div className="w-8 h-8 bg-red-600 rounded-sm"></div>
+        {/* Loading/Error overlay */}
+        {(status === 'loading' || status === 'error') && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black">
+            <div className="text-center p-4">
+              {status === 'loading' && (
+                <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+              )}
+              <p className="text-lg">{message}</p>
+              {status === 'error' && (
+                <button onClick={startCamera} className="mt-4 bg-purple-600 px-6 py-2 rounded-lg">
+                  Retry
                 </button>
               )}
             </div>
-
-            {isRecording && (
-              <button onClick={panicClose} className="text-yellow-500 font-bold text-sm mt-2 uppercase tracking-widest">
-                Panic Close
-              </button>
-            )}
           </div>
-        ) : (
-          // Post-Recording Controls
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              <button
-                onClick={() => {
-                  if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-                  setRecordedBlob(null);
-                  setRecordedUrl(null);
-                }}
-                disabled={isUploading}
-                className="flex-1 bg-gray-800/80 backdrop-blur text-white font-semibold py-4 rounded-xl disabled:opacity-50"
-              >
-                Discard
-              </button>
-              <button
-                onClick={saveAndUpload}
-                disabled={isUploading}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2"
-              >
-                {isUploading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <span>Save & Upload</span>
-                )}
-              </button>
-            </div>
+        )}
+
+        {/* Recording indicator */}
+        {status === 'recording' && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-red-600/80 px-4 py-2 rounded-full">
+            <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
+            <span className="font-mono font-bold">{formatTime(recordingTime)}</span>
           </div>
         )}
       </div>
+
+      {/* Controls */}
+      <div className="bg-black p-4 pb-8 safe-area-inset-bottom">
+        {status === 'ready' && (
+          <div className="flex items-center justify-center gap-8">
+            <button onClick={toggleCamera} className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-2xl">
+              🔄
+            </button>
+            <button onClick={startRecording} className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center">
+              <div className="w-16 h-16 bg-red-600 rounded-full" />
+            </button>
+            <Link href="/videos" className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-2xl">
+              📹
+            </Link>
+          </div>
+        )}
+
+        {status === 'recording' && (
+          <div className="flex flex-col items-center gap-4">
+            <button onClick={stopRecording} className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center">
+              <div className="w-8 h-8 bg-red-600 rounded-sm" />
+            </button>
+          </div>
+        )}
+
+        {status === 'preview' && (
+          <div className="flex gap-4">
+            <button onClick={discardRecording} className="flex-1 bg-gray-700 py-4 rounded-xl font-semibold">
+              Discard
+            </button>
+            <button onClick={uploadVideo} className="flex-1 bg-purple-600 py-4 rounded-xl font-semibold">
+              Upload
+            </button>
+          </div>
+        )}
+
+        {status === 'uploading' && (
+          <div className="text-center py-4">
+            <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-2" />
+            <p>{message}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Debug overlay - LAST ELEMENT for highest z-index */}
+      <div className="fixed top-4 left-4 right-4 z-[9999] pointer-events-none">
+        <div className="bg-black/90 border border-green-500/50 rounded-lg p-3 text-xs font-mono text-green-400 max-h-48 overflow-y-auto">
+          <div className="font-bold text-green-300 mb-1">DEBUG ({status})</div>
+          {debugLogs.map((log, i) => (
+            <div key={i} className="opacity-80">{log}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Back button */}
+      <Link href="/" className="fixed top-4 right-4 z-[9998] w-10 h-10 flex items-center justify-center bg-black/50 backdrop-blur rounded-full text-xl">
+        ✕
+      </Link>
     </div>
   );
 }
