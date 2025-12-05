@@ -21,8 +21,11 @@ export default function RootLayout({
           crossOrigin=""
         />
       </head>
-      <body className="antialiased">
+      <body className={inter.className}>
         {children}
+        <div className="fixed bottom-0 left-0 right-0 bg-red-600 text-white text-xs font-bold text-center p-1 z-[999999]">
+          DEPLOYMENT CHECK: v2.0.0-ios-fix
+        </div>
       </body>
     </html>
   );
