@@ -1,148 +1,174 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-// Version for debugging deployment
-const VERSION = 'v2.1.0-ios-gesture';
+/**
+ * CAMERA v3.0.0 - BULLETPROOF iOS BUILD
+ * 
+ * This is a minimal rebuild with:
+ * - Maximum visibility of state (no hidden debug panels)
+ * - Timeout wrapper for getUserMedia
+ * - Simple CSS (no absolute/fixed positioning for video)
+ * - Explicit feature detection
+ * - Every step logged to visible UI
+ */
+
+const VERSION = 'v3.0.0-bulletproof';
+
+// Timeout wrapper for getUserMedia
+async function getUserMediaWithTimeout(
+  constraints: MediaStreamConstraints,
+  timeoutMs: number = 10000
+): Promise<MediaStream> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`getUserMedia timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    navigator.mediaDevices
+      .getUserMedia(constraints)
+      .then((stream) => {
+        clearTimeout(timer);
+        resolve(stream);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 export default function CameraView() {
+  // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playbackRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const [phase, setPhase] = useState<'start' | 'init' | 'ready' | 'recording' | 'preview' | 'uploading'>('start');
+  // State
+  const [logs, setLogs] = useState<string[]>([`[${VERSION}] Page loaded`]);
+  const [status, setStatus] = useState<string>('IDLE');
   const [error, setError] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [uploadProgress, setUploadProgress] = useState('');
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
-  const [useFrontCamera, setUseFrontCamera] = useState(false);
-  const [logs, setLogs] = useState<string[]>([`${VERSION} loaded`]);
-  const [mimeType, setMimeType] = useState<string>('video/webm');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   const router = useRouter();
 
-  const log = useCallback((msg: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`[Camera] ${msg}`);
-    setLogs(prev => [...prev.slice(-8), `${timestamp}: ${msg}`]);
-  }, []);
+  // Logging function - adds to UI
+  const log = (msg: string) => {
+    const time = new Date().toLocaleTimeString();
+    const entry = `[${time}] ${msg}`;
+    console.log(entry);
+    setLogs((prev) => [...prev.slice(-15), entry]);
+  };
 
-  // Detect best MIME type for this device
-  const detectMimeType = useCallback(() => {
-    if (typeof MediaRecorder === 'undefined') return 'video/webm';
-    const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-    for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        log(`MIME: ${type}`);
-        return type;
-      }
+  // STEP 1: Check browser capabilities
+  const checkCapabilities = (): boolean => {
+    log('Checking capabilities...');
+
+    if (typeof window === 'undefined') {
+      log('ERROR: Running on server');
+      return false;
     }
-    return 'video/webm';
-  }, [log]);
 
-  // Initialize camera - MUST be called from user gesture on iOS
-  const startCamera = useCallback(async () => {
-    log('startCamera() - user triggered');
-    setPhase('init');
+    if (!window.isSecureContext) {
+      log('ERROR: Not HTTPS');
+      setError('HTTPS required. Please use https://');
+      return false;
+    }
+
+    if (!navigator.mediaDevices) {
+      log('ERROR: mediaDevices not available');
+      setError('Your browser does not support camera access');
+      return false;
+    }
+
+    if (!navigator.mediaDevices.getUserMedia) {
+      log('ERROR: getUserMedia not available');
+      setError('Your browser does not support getUserMedia');
+      return false;
+    }
+
+    log('All capabilities OK');
+    return true;
+  };
+
+  // STEP 2: Start camera (called by user tap)
+  const handleStartCamera = async () => {
+    log('START CAMERA button pressed');
+    setStatus('REQUESTING_CAMERA');
     setError(null);
 
-    // Detect MIME type
-    const detectedMime = detectMimeType();
-    setMimeType(detectedMime);
-
-    // Check secure context
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
-      log('ERROR: Not HTTPS');
-      setError('HTTPS required for camera access. Please use https://');
-      return;
-    }
-
-    // Check API availability
-    if (!navigator.mediaDevices?.getUserMedia) {
-      log('ERROR: getUserMedia not available');
-      setError('Camera API not available on this browser');
+    if (!checkCapabilities()) {
+      setStatus('ERROR');
       return;
     }
 
     try {
-      // Stop any existing stream first
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      }
+      log('Calling getUserMedia (10s timeout)...');
 
-      log(`Requesting camera (front: ${useFrontCamera})...`);
+      const stream = await getUserMediaWithTimeout(
+        {
+          video: { facingMode: 'environment' },
+          audio: true,
+        },
+        10000
+      );
 
-      // Use simplest possible constraints for maximum iOS compatibility
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: useFrontCamera ? 'user' : 'environment' },
-        audio: true
+      log(`Stream obtained: ${stream.getTracks().length} tracks`);
+      stream.getTracks().forEach((track) => {
+        log(`  Track: ${track.kind} - ${track.label}`);
       });
 
-      log(`Got stream: ${stream.getVideoTracks().length} video, ${stream.getAudioTracks().length} audio`);
       streamRef.current = stream;
 
       // Assign to video element
-      if (videoRef.current) {
-        const video = videoRef.current;
-        video.srcObject = stream;
-
-        // iOS requires explicit play() call
-        log('Calling video.play()...');
-        await video.play();
-        log(`Playing! ${video.videoWidth}x${video.videoHeight}`);
-
-        setPhase('ready');
-      } else {
-        throw new Error('Video element not found');
+      if (!videoRef.current) {
+        throw new Error('Video element not found in DOM');
       }
+
+      log('Assigning stream to video element...');
+      videoRef.current.srcObject = stream;
+
+      log('Waiting for video loadedmetadata...');
+      await new Promise<void>((resolve, reject) => {
+        const video = videoRef.current!;
+        const timeout = setTimeout(() => reject(new Error('loadedmetadata timeout')), 5000);
+        video.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          log(`Video metadata: ${video.videoWidth}x${video.videoHeight}`);
+          resolve();
+        };
+        video.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('Video element error'));
+        };
+      });
+
+      log('Calling video.play()...');
+      await videoRef.current.play();
+      log('Video is now playing!');
+
+      setCameraActive(true);
+      setStatus('CAMERA_READY');
 
     } catch (err: any) {
-      log(`ERROR: ${err.name} - ${err.message}`);
-
-      // Provide user-friendly error messages
-      let userMessage = err.message;
-      if (err.name === 'NotAllowedError') {
-        userMessage = 'Camera permission denied. Please allow camera access in your browser settings.';
-      } else if (err.name === 'NotFoundError') {
-        userMessage = 'No camera found on this device.';
-      } else if (err.name === 'NotReadableError') {
-        userMessage = 'Camera is in use by another app. Please close other apps using the camera.';
-      } else if (err.name === 'OverconstrainedError') {
-        userMessage = 'Camera settings not supported. Trying again with defaults...';
-        // Retry with minimal constraints
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            await videoRef.current.play();
-            setPhase('ready');
-            return;
-          }
-        } catch (retryErr: any) {
-          userMessage = `Camera error: ${retryErr.message}`;
-        }
-      }
-
-      setError(userMessage);
+      log(`ERROR: ${err.name || 'Unknown'} - ${err.message}`);
+      setError(err.message || 'Camera failed to start');
+      setStatus('ERROR');
+      setCameraActive(false);
     }
-  }, [useFrontCamera, log, detectMimeType]);
+  };
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-      log('Camera stopped');
-    }
-  }, [log]);
-
-  const startRecording = () => {
+  // STEP 3: Start recording
+  const handleStartRecording = () => {
     if (!streamRef.current) {
       log('Cannot record: no stream');
       return;
@@ -151,333 +177,460 @@ export default function CameraView() {
     log('Starting recording...');
     chunksRef.current = [];
 
+    // Detect MIME type
+    let mimeType = 'video/webm';
+    for (const type of ['video/mp4', 'video/webm;codecs=vp9', 'video/webm']) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        mimeType = type;
+        break;
+      }
+    }
+    log(`Using MIME: ${mimeType}`);
+
     try {
       const recorder = new MediaRecorder(streamRef.current, { mimeType });
-      mediaRecorderRef.current = recorder;
+      recorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
+          log(`Chunk received: ${(e.data.size / 1024).toFixed(1)} KB`);
         }
       };
 
       recorder.onstop = () => {
-        log('Recording stopped, creating blob...');
+        log('Recorder stopped');
         const blob = new Blob(chunksRef.current, { type: mimeType });
+        log(`Final blob: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
         setRecordedBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setRecordedUrl(url);
-        log(`Blob: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
-        setPhase('preview');
-        stopCamera(); // Release camera after recording
+        setRecordedUrl(URL.createObjectURL(blob));
+        setStatus('PREVIEW');
+
+        // Stop camera after recording
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
+        setCameraActive(false);
       };
 
-      // Recording timer
+      recorder.start(1000); // chunk every second
+      setIsRecording(true);
+      setRecordingTime(0);
+      setStatus('RECORDING');
+
+      // Timer
       const startTime = Date.now();
       const timer = setInterval(() => {
-        if (mediaRecorderRef.current?.state === 'recording') {
+        if (recorderRef.current?.state === 'recording') {
           setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
         } else {
           clearInterval(timer);
         }
-      }, 1000);
+      }, 500);
 
-      recorder.start(1000);
-      setRecordingTime(0);
-      setPhase('recording');
       log('Recording started');
-
     } catch (err: any) {
       log(`Record error: ${err.message}`);
       setError(`Recording failed: ${err.message}`);
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && phase === 'recording') {
+  // STEP 4: Stop recording
+  const handleStopRecording = () => {
+    if (recorderRef.current && isRecording) {
       log('Stopping recording...');
-      mediaRecorderRef.current.stop();
+      recorderRef.current.stop();
+      setIsRecording(false);
     }
   };
 
-  const discardRecording = () => {
+  // Discard recording
+  const handleDiscard = () => {
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
     setRecordedBlob(null);
     setRecordedUrl(null);
-    setPhase('start'); // Go back to start screen
+    setStatus('IDLE');
     log('Recording discarded');
   };
 
-  const switchCamera = () => {
-    log('Switching camera...');
-    stopCamera();
-    setUseFrontCamera(prev => !prev);
-    setPhase('start'); // Go back to start to re-trigger with new camera
-  };
-
-  const uploadVideo = async () => {
+  // Upload recording
+  const handleUpload = async () => {
     if (!recordedBlob) return;
 
     const session = localStorage.getItem('hotzones-session');
     if (!session) {
-      setError('Please check in first before uploading');
+      setError('Please check in first');
       return;
     }
 
-    setPhase('uploading');
-    setUploadProgress('Initializing...');
+    setIsUploading(true);
+    setUploadStatus('Initializing...');
     log('Starting upload...');
 
     try {
-      // 1. Initialize upload
+      // Detect MIME type
+      let mimeType = 'video/webm';
+      for (const type of ['video/mp4', 'video/webm;codecs=vp9', 'video/webm']) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+
+      // Init
       const initRes = await fetch('/api/upload-multipart/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contentType: mimeType }),
       });
-
-      if (!initRes.ok) throw new Error('Failed to initialize upload');
+      if (!initRes.ok) throw new Error('Init failed');
       const { uploadId, key, videoId } = await initRes.json();
       log('Upload initialized');
 
-      // 2. Upload in chunks
-      const CHUNK_SIZE = 6 * 1024 * 1024;
-      const totalParts = Math.ceil(recordedBlob.size / CHUNK_SIZE);
+      // Upload parts
+      const CHUNK = 6 * 1024 * 1024;
+      const total = Math.ceil(recordedBlob.size / CHUNK);
       const parts: { PartNumber: number; ETag: string }[] = [];
 
-      for (let i = 0; i < totalParts; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, recordedBlob.size);
-        const chunk = recordedBlob.slice(start, end);
-        const partNum = i + 1;
+      for (let i = 0; i < total; i++) {
+        const chunk = recordedBlob.slice(i * CHUNK, Math.min((i + 1) * CHUNK, recordedBlob.size));
+        setUploadStatus(`Part ${i + 1}/${total}`);
 
-        setUploadProgress(`Uploading ${partNum}/${totalParts}...`);
-
-        // Get presigned URL
         const partRes = await fetch('/api/upload-multipart/part', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uploadId, key, partNumber: partNum }),
+          body: JSON.stringify({ uploadId, key, partNumber: i + 1 }),
         });
-
-        if (!partRes.ok) throw new Error(`Failed to get URL for part ${partNum}`);
+        if (!partRes.ok) throw new Error(`Part ${i + 1} URL failed`);
         const { presignedUrl } = await partRes.json();
 
-        // Upload to R2
-        const uploadRes = await fetch(presignedUrl, { method: 'PUT', body: chunk });
-        if (!uploadRes.ok) throw new Error(`Failed to upload part ${partNum}`);
+        const upRes = await fetch(presignedUrl, { method: 'PUT', body: chunk });
+        if (!upRes.ok) throw new Error(`Part ${i + 1} upload failed`);
 
-        const eTag = uploadRes.headers.get('ETag');
-        if (!eTag) throw new Error(`No ETag for part ${partNum}`);
-
-        parts.push({ PartNumber: partNum, ETag: eTag });
-        log(`Part ${partNum}/${totalParts} done`);
+        const eTag = upRes.headers.get('ETag');
+        if (!eTag) throw new Error(`No ETag for part ${i + 1}`);
+        parts.push({ PartNumber: i + 1, ETag: eTag });
+        log(`Part ${i + 1}/${total} done`);
       }
 
-      // 3. Complete upload
-      setUploadProgress('Finalizing...');
+      // Complete
+      setUploadStatus('Finalizing...');
       const sessionData = JSON.parse(session);
+      const form = new FormData();
+      form.append('uploadId', uploadId);
+      form.append('key', key);
+      form.append('videoId', videoId);
+      form.append('parts', JSON.stringify(parts));
+      form.append('sessionId', sessionData.sessionId);
+      form.append('duration', recordingTime.toString());
+      form.append('size', recordedBlob.size.toString());
 
-      const formData = new FormData();
-      formData.append('uploadId', uploadId);
-      formData.append('key', key);
-      formData.append('videoId', videoId);
-      formData.append('parts', JSON.stringify(parts));
-      formData.append('sessionId', sessionData.sessionId);
-      formData.append('duration', recordingTime.toString());
-      formData.append('size', recordedBlob.size.toString());
-
-      const completeRes = await fetch('/api/upload-multipart/complete', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!completeRes.ok) throw new Error('Failed to complete upload');
+      const compRes = await fetch('/api/upload-multipart/complete', { method: 'POST', body: form });
+      if (!compRes.ok) throw new Error('Complete failed');
 
       log('Upload complete!');
-      setUploadProgress('✓ Uploaded!');
-
+      setUploadStatus('✓ Done!');
       setTimeout(() => router.push('/videos'), 1500);
-
     } catch (err: any) {
       log(`Upload error: ${err.message}`);
       setError(`Upload failed: ${err.message}`);
-      setPhase('preview');
+      setIsUploading(false);
     }
   };
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
-    <div className="fixed inset-0 bg-black text-white flex flex-col">
-      {/* Video display area */}
-      <div className="flex-1 relative bg-gray-900 overflow-hidden">
-        {/* Hidden video element for camera feed */}
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#000',
+      color: '#fff',
+      padding: '10px',
+      fontFamily: 'system-ui, sans-serif'
+    }}>
+      {/* HEADER */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '10px',
+        padding: '5px',
+        backgroundColor: '#111',
+        borderRadius: '5px'
+      }}>
+        <Link href="/" style={{ color: '#a78bfa', textDecoration: 'none' }}>← Home</Link>
+        <span style={{ fontSize: '12px', color: '#4ade80' }}>{VERSION}</span>
+        <span style={{ fontSize: '12px', color: '#facc15' }}>{status}</span>
+      </div>
+
+      {/* PAGE IDENTIFIER - Very visible */}
+      <div style={{
+        backgroundColor: '#7c3aed',
+        padding: '10px',
+        textAlign: 'center',
+        borderRadius: '5px',
+        marginBottom: '10px',
+        fontWeight: 'bold'
+      }}>
+        📹 CAMERA PAGE - /camera
+      </div>
+
+      {/* VIDEO CONTAINER */}
+      <div style={{
+        width: '100%',
+        aspectRatio: '9/16',
+        maxHeight: '50vh',
+        backgroundColor: '#1f2937',
+        borderRadius: '10px',
+        overflow: 'hidden',
+        marginBottom: '10px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        {/* Video element - always in DOM */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`absolute inset-0 w-full h-full object-cover ${phase === 'ready' || phase === 'recording' ? '' : 'hidden'}`}
-          style={{ transform: useFrontCamera ? 'scaleX(-1)' : 'none' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: cameraActive ? 'block' : 'none'
+          }}
         />
 
-        {/* Playback video for preview */}
-        {phase === 'preview' && recordedUrl && (
+        {/* Preview video */}
+        {recordedUrl && status === 'PREVIEW' && (
           <video
-            ref={playbackRef}
             src={recordedUrl}
             controls
             playsInline
             loop
             autoPlay
-            className="absolute inset-0 w-full h-full object-contain"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
         )}
 
-        {/* START SCREEN - User must tap to start camera (iOS requirement) */}
-        {phase === 'start' && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-gray-800 to-gray-900">
-            <div className="text-center p-8">
-              <div className="text-6xl mb-6">📹</div>
-              <h1 className="text-2xl font-bold mb-4">Record Video</h1>
-              <p className="text-gray-400 mb-8 max-w-xs">Tap the button below to start the camera</p>
-              <button
-                onClick={startCamera}
-                className="bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-bold py-4 px-8 rounded-2xl text-lg shadow-lg"
-              >
-                Start Camera
-              </button>
-            </div>
+        {/* Placeholder when no camera */}
+        {!cameraActive && !recordedUrl && (
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <div style={{ fontSize: '48px', marginBottom: '10px' }}>📷</div>
+            <div style={{ color: '#9ca3af' }}>Camera not started</div>
           </div>
         )}
 
-        {/* Loading overlay */}
-        {phase === 'init' && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-lg">Starting camera...</p>
-            </div>
-          </div>
-        )}
-
-        {/* Error overlay */}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/90">
-            <div className="text-center p-6 max-w-sm">
-              <div className="text-4xl mb-4">⚠️</div>
-              <p className="text-lg mb-6">{error}</p>
-              <button
-                onClick={() => { setError(null); setPhase('start'); }}
-                className="bg-purple-600 px-8 py-3 rounded-xl font-semibold"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Recording indicator */}
-        {phase === 'recording' && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-red-600 px-4 py-2 rounded-full shadow-lg">
-            <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
-            <span className="font-mono font-bold text-lg">{formatTime(recordingTime)}</span>
-          </div>
-        )}
-
-        {/* Uploading overlay */}
-        {phase === 'uploading' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-lg">{uploadProgress}</p>
-            </div>
+        {/* Recording overlay */}
+        {isRecording && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: '#dc2626',
+            padding: '5px 15px',
+            borderRadius: '20px',
+            fontWeight: 'bold'
+          }}>
+            ● {formatTime(recordingTime)}
           </div>
         )}
       </div>
 
-      {/* Control bar */}
-      <div className="bg-black/90 p-4 pb-8 border-t border-white/10">
-        {phase === 'ready' && (
-          <div className="flex items-center justify-center gap-8">
-            <button
-              onClick={switchCamera}
-              className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center text-2xl active:bg-white/20"
-            >
-              🔄
-            </button>
-            <button
-              onClick={startRecording}
-              className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center"
-            >
-              <div className="w-14 h-14 bg-red-500 rounded-full" />
-            </button>
-            <Link
-              href="/videos"
-              className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center text-2xl"
-            >
-              📹
-            </Link>
-          </div>
-        )}
-
-        {phase === 'recording' && (
-          <div className="flex justify-center">
-            <button
-              onClick={stopRecording}
-              className="w-20 h-20 rounded-full border-4 border-red-500 flex items-center justify-center"
-            >
-              <div className="w-8 h-8 bg-red-500 rounded" />
-            </button>
-          </div>
-        )}
-
-        {phase === 'preview' && (
-          <div className="flex gap-4">
-            <button
-              onClick={discardRecording}
-              className="flex-1 bg-gray-700 py-4 rounded-xl font-semibold active:bg-gray-600"
-            >
-              Discard
-            </button>
-            <button
-              onClick={uploadVideo}
-              className="flex-1 bg-purple-600 py-4 rounded-xl font-semibold active:bg-purple-500"
-            >
-              Upload
-            </button>
-          </div>
-        )}
-
-        {(phase === 'start' || phase === 'init') && (
-          <div className="flex justify-center">
-            <Link
-              href="/"
-              className="text-gray-400 hover:text-white py-2 px-4"
-            >
-              ← Back to Home
-            </Link>
-          </div>
-        )}
-      </div>
-
-      {/* Debug panel - at very top */}
-      <div className="fixed top-0 left-0 right-0 z-[99999] bg-black/95 border-b border-green-500/30 p-2 text-xs font-mono text-green-400 max-h-24 overflow-y-auto">
-        <div className="flex justify-between items-center mb-1">
-          <span className="font-bold text-green-300">{VERSION}</span>
-          <span className="text-green-500">{phase}</span>
+      {/* ERROR DISPLAY */}
+      {error && (
+        <div style={{
+          backgroundColor: '#7f1d1d',
+          padding: '15px',
+          borderRadius: '5px',
+          marginBottom: '10px',
+          textAlign: 'center'
+        }}>
+          ⚠️ {error}
+          <button
+            onClick={() => setError(null)}
+            style={{
+              marginLeft: '10px',
+              padding: '5px 10px',
+              backgroundColor: '#991b1b',
+              border: 'none',
+              borderRadius: '3px',
+              color: '#fff',
+              cursor: 'pointer'
+            }}
+          >
+            Dismiss
+          </button>
         </div>
-        {logs.slice(-3).map((l, i) => <div key={i} className="opacity-80 truncate">{l}</div>)}
+      )}
+
+      {/* CONTROLS */}
+      <div style={{ marginBottom: '10px' }}>
+        {status === 'IDLE' && (
+          <button
+            onClick={handleStartCamera}
+            style={{
+              width: '100%',
+              padding: '15px',
+              backgroundColor: '#7c3aed',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#fff',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            📹 Start Camera
+          </button>
+        )}
+
+        {status === 'REQUESTING_CAMERA' && (
+          <div style={{ textAlign: 'center', padding: '15px' }}>
+            <div style={{ fontSize: '24px', marginBottom: '5px' }}>⏳</div>
+            <div>Requesting camera access...</div>
+          </div>
+        )}
+
+        {status === 'CAMERA_READY' && (
+          <button
+            onClick={handleStartRecording}
+            style={{
+              width: '100%',
+              padding: '15px',
+              backgroundColor: '#dc2626',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#fff',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            ⏺ Start Recording
+          </button>
+        )}
+
+        {status === 'RECORDING' && (
+          <button
+            onClick={handleStopRecording}
+            style={{
+              width: '100%',
+              padding: '15px',
+              backgroundColor: '#991b1b',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#fff',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            ⏹ Stop Recording
+          </button>
+        )}
+
+        {status === 'PREVIEW' && !isUploading && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={handleDiscard}
+              style={{
+                flex: 1,
+                padding: '15px',
+                backgroundColor: '#374151',
+                border: 'none',
+                borderRadius: '10px',
+                color: '#fff',
+                fontSize: '16px',
+                cursor: 'pointer'
+              }}
+            >
+              🗑 Discard
+            </button>
+            <button
+              onClick={handleUpload}
+              style={{
+                flex: 1,
+                padding: '15px',
+                backgroundColor: '#059669',
+                border: 'none',
+                borderRadius: '10px',
+                color: '#fff',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              ⬆ Upload
+            </button>
+          </div>
+        )}
+
+        {isUploading && (
+          <div style={{ textAlign: 'center', padding: '15px' }}>
+            <div style={{ fontSize: '24px', marginBottom: '5px' }}>⬆️</div>
+            <div>{uploadStatus}</div>
+          </div>
+        )}
+
+        {status === 'ERROR' && (
+          <button
+            onClick={() => { setError(null); setStatus('IDLE'); }}
+            style={{
+              width: '100%',
+              padding: '15px',
+              backgroundColor: '#7c3aed',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#fff',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            🔄 Try Again
+          </button>
+        )}
       </div>
 
-      {/* Home button */}
-      <Link
-        href="/"
-        className="fixed bottom-24 right-4 z-[99998] w-12 h-12 bg-white/10 backdrop-blur rounded-full flex items-center justify-center text-xl shadow-lg"
-      >
-        🏠
-      </Link>
+      {/* LOG DISPLAY - Always visible */}
+      <div style={{
+        backgroundColor: '#0f172a',
+        padding: '10px',
+        borderRadius: '5px',
+        fontSize: '11px',
+        fontFamily: 'monospace',
+        maxHeight: '150px',
+        overflowY: 'auto',
+        border: '1px solid #334155'
+      }}>
+        <div style={{
+          color: '#4ade80',
+          marginBottom: '5px',
+          fontWeight: 'bold',
+          borderBottom: '1px solid #334155',
+          paddingBottom: '5px'
+        }}>
+          DEBUG LOGS
+        </div>
+        {logs.map((log, i) => (
+          <div key={i} style={{ color: '#94a3b8', marginBottom: '2px' }}>{log}</div>
+        ))}
+      </div>
+
+      {/* QUICK LINKS */}
+      <div style={{
+        display: 'flex',
+        gap: '10px',
+        marginTop: '10px',
+        justifyContent: 'center'
+      }}>
+        <Link href="/" style={{ color: '#a78bfa', fontSize: '14px' }}>🏠 Home</Link>
+        <Link href="/videos" style={{ color: '#a78bfa', fontSize: '14px' }}>📹 Videos</Link>
+      </div>
     </div>
   );
 }
