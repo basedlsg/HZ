@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
 
   // Force Update Logic
-  const APP_VERSION = 'v3.4'; // MUST MATCH UI DISPLAY
+  const APP_VERSION = 'v4.0-dev'; // MUST MATCH UI DISPLAY
 
   useEffect(() => {
     const hour = new Date().getHours();

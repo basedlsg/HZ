@@ -3,10 +3,10 @@ import Webcam from 'react-webcam';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { X, Loader2, ShieldAlert, ArrowLeft, QrCode, Check, RefreshCcw, Copy, Flashlight, ZoomIn } from 'lucide-react';
 import { RecorderState, FeedItem, SyncStatus } from '../types';
-import { analyzeFootage } from '../services/geminiService';
+import { analyzeFootage } from '../services/llamaService'; // Switched from Gemini to Llama
 import { db } from '../services/db';
 import { loadModels, analyzeFaces } from '../services/forensicService';
-import { uploadItem } from '../services/syncService';
+// import { uploadItem } from '../services/syncService'; // Disabled for local-only testing
 import { calculateDistance } from '../services/geo';
 import { CameraDebugOverlay } from './CameraDebugOverlay';
 
@@ -387,7 +387,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
 
                 // Save to DB
                 await db.saveRecording(newItem, videoBlob);
-                uploadItem(newItem);
+                // uploadItem(newItem); // Disabled for local-only testing
                 onRecordingComplete(newItem);
 
             } catch (error: any) {
