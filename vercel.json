@@ -1,0 +1,12 @@
+{
+    "framework": "vite",
+    "buildCommand": "npm install && npm run build",
+    "installCommand": "npm install",
+    "outputDirectory": "dist",
+    "functions": {
+        "api/*.ts": {
+            "memory": 1024,
+            "maxDuration": 10
+        }
+    }
+}

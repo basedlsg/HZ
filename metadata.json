@@ -1,0 +1,9 @@
+{
+  "name": "Ombrixa",
+  "description": "A location-gated, anonymous civic safety tool for documentation and situational awareness during public gatherings.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

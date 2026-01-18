@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Ombrixa System Architecture</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Ombrixa System Architecture</h1>
+</header>
+<h1 id="ombrixa">Ombrixa</h1>
+<h2 id="system-architecture">System Architecture</h2>
+<hr />
+<h3 id="overview">Overview</h3>
+<p>Ombrixa is a mobile-first web application that transforms any
+smartphone into a tactical awareness device. Users record video of
+incidents, and the application automatically analyzes the footage using
+AI to extract actionable intelligence—identifying vehicles, personnel,
+license plates, badge numbers, and assessing overall safety levels.</p>
+<hr />
+<h3 id="system-flow">System Flow</h3>
+<p>The application follows a straightforward pipeline:</p>
+<ol type="1">
+<li><strong>Capture</strong> — Record video through the device
+camera</li>
+<li><strong>Sample</strong> — Extract representative frames at regular
+intervals</li>
+<li><strong>Analyze</strong> — Send frames to a vision AI model for
+processing</li>
+<li><strong>Report</strong> — Present structured results to the
+user</li>
+<li><strong>Store</strong> — Persist data locally on the device</li>
+</ol>
+<hr />
+<h3 id="core-user-experience">Core User Experience</h3>
+<p><strong>Check-In Phase</strong></p>
+<p>When the app launches, users verify their location through a “hold to
+confirm” interaction. This establishes their geographic presence and
+prepares the system for location-tagged recordings.</p>
+<p><strong>Feed Phase</strong></p>
+<p>The main screen displays a scrollable list of recorded incidents.
+Each card shows a video thumbnail, the AI-generated situation report,
+and community voting indicators. Users can toggle to a map view showing
+incident locations color-coded by safety level.</p>
+<p><strong>Camera Phase</strong></p>
+<p>The recording interface provides standard camera controls—flip,
+flash, and zoom—plus a unique peer verification feature via QR codes.
+When recording stops, the app automatically processes the footage
+through the AI pipeline.</p>
+<hr />
+<h3 id="ai-integration">AI Integration</h3>
+<p><strong>Vision Analysis</strong></p>
+<p>The application uses Google’s Gemini 2.0 Flash model, a multimodal AI
+capable of understanding images and extracting structured information.
+Rather than sending an entire video (which would be slow and expensive),
+the app samples multiple frames at regular intervals, capturing the
+scene’s evolution over time.</p>
+<p><strong>Multi-Frame Intelligence</strong></p>
+<p>Sending multiple frames serves several purposes:</p>
+<ul>
+<li><em>Temporal context</em> — The AI observes movement, changes in
+positioning, and transient details</li>
+<li><em>Redundancy</em> — If one frame is blurry or obstructed, others
+provide backup</li>
+<li><em>Aggregation</em> — The model combines observations across all
+frames into a unified report</li>
+</ul>
+<p><strong>Structured Output</strong></p>
+<p>The AI returns structured data containing:</p>
+<table>
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 65%" />
+</colgroup>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Situation Report</td>
+<td>Concise summary of observed activity</td>
+</tr>
+<tr>
+<td>Safety Score</td>
+<td>1–100 rating based on detected threat indicators</td>
+</tr>
+<tr>
+<td>Vehicle Details</td>
+<td>Make, model, color, license plate, agency affiliation</td>
+</tr>
+<tr>
+<td>Personnel Details</td>
+<td>Uniform type, rank, badge text, badge number, precinct</td>
+</tr>
+<tr>
+<td>Context Tags</td>
+<td>Descriptive labels such as “peaceful assembly” or “commercial
+zone”</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Prompt Engineering</strong></p>
+<p>The quality of AI responses depends heavily on how questions are
+framed. The system uses carefully structured prompts that define the
+AI’s role, provide explicit output format requirements, include multiple
+examples to prevent single-result bias, and emphasize completeness in
+returning all detected entities.</p>
+<hr />
+<h3 id="data-storage">Data Storage</h3>
+<p>All data remains on the user’s device. The app uses the browser’s
+built-in IndexedDB database, which provides persistent storage that
+survives page refreshes and browser restarts.</p>
+<p><strong>Local-First Design</strong></p>
+<p>By keeping data local, the app:</p>
+<ul>
+<li>Works offline (except for AI analysis, which requires network)</li>
+<li>Gives users full control over their recordings</li>
+<li>Eliminates server-side storage costs and privacy concerns</li>
+</ul>
+<hr />
+<h3 id="progressive-web-app-features">Progressive Web App Features</h3>
+<p><strong>Installability</strong></p>
+<p>Though accessed through a web browser, Ombrixa can be installed to
+the home screen, where it behaves like a native app—with its own icon,
+full-screen display, and no browser interface.</p>
+<p><strong>Automatic Updates</strong></p>
+<p>When new versions are deployed, the app’s service worker detects
+changes and automatically refreshes. Users always receive the latest
+features without manual intervention.</p>
+<p><strong>Offline Capability</strong></p>
+<p>Core functionality works without internet. Previously recorded
+incidents remain viewable, and the camera still functions. Only the AI
+analysis step requires connectivity.</p>
+<hr />
+<h3 id="peer-verification">Peer Verification</h3>
+<p><strong>The Problem</strong></p>
+<p>At events with many participants, how do you verify that someone
+claiming to be nearby is actually present? Remote actors could
+potentially spoof their location.</p>
+<p><strong>The Solution</strong></p>
+<p>Each user generates a QR code containing their unique session ID and
+current GPS coordinates. When another user scans this code, the app
+compares the embedded coordinates against the scanner’s current location
+and accepts the connection only if both parties are within 50 meters.
+This ensures real-world proximity without requiring any centralized
+verification system.</p>
+<hr />
+<h3 id="map-visualization">Map Visualization</h3>
+<p>Incidents appear as markers on an interactive map. The color-coding
+reflects community sentiment:</p>
+<ul>
+<li><strong>Green markers</strong> — Majority positive votes (perceived
+as safe)</li>
+<li><strong>Red markers</strong> — Majority negative votes (perceived as
+dangerous)</li>
+</ul>
+<p>The visualization uses geographic clustering so densely packed
+incidents remain distinguishable.</p>
+<hr />
+<h3 id="camera-controls">Camera Controls</h3>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Function</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flash</td>
+<td>Activates device flashlight for low-light recording</td>
+</tr>
+<tr>
+<td>Zoom</td>
+<td>Digital zoom from 1x to 4x via slider</td>
+</tr>
+<tr>
+<td>Flip</td>
+<td>Switches between front and rear cameras</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="technology-stack">Technology Stack</h3>
+<table>
+<colgroup>
+<col style="width: 32%" />
+<col style="width: 35%" />
+<col style="width: 32%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Technology</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Platform</td>
+<td>Progressive Web App</td>
+<td>Cross-platform without app store approval</td>
+</tr>
+<tr>
+<td>Framework</td>
+<td>React</td>
+<td>Component-based UI with excellent ecosystem</td>
+</tr>
+<tr>
+<td>AI Model</td>
+<td>Gemini 2.0 Flash</td>
+<td>Fast multimodal inference with structured output</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>IndexedDB</td>
+<td>Persistent local storage across all browsers</td>
+</tr>
+<tr>
+<td>Hosting</td>
+<td>Vercel</td>
+<td>Instant deployment with edge CDN</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="architecture-diagram">Architecture Diagram</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                      USER INTERFACE                         │
+├───────────────────┬───────────────────┬─────────────────────┤
+│   Camera Screen   │   Feed Screen     │    Map Screen       │
+└─────────┬─────────┴─────────┬─────────┴──────────┬──────────┘
+          │                   │                    │
+          ▼                   │                    │
+┌─────────────────────┐       │                    │
+│  Frame Extraction   │       │                    │
+└─────────┬───────────┘       │                    │
+          │                   │                    │
+          ▼                   │                    │
+┌─────────────────────┐       │                    │
+│  Gemini Vision API  │       │                    │
+└─────────┬───────────┘       │                    │
+          │                   │                    │
+          ▼                   ▼                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       IndexedDB                             │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<hr />
+<p><em>Document Version 1.8</em></p>
+</body>
+</html>
