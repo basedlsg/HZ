@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { FeedItem, SyncStatus } from '../types';
-import { Play, Pause, MapPin, Shield, AlertTriangle, Cloud, CloudUpload, CloudCheck, CloudOff, Info, X, Car, User, Fingerprint, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Pause, MapPin, Shield, AlertTriangle, Cloud, CloudUpload, CloudCheck, CloudOff, Info, X, Car, User, Fingerprint, Siren, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { db } from '../services/db';
 
 interface EventCardProps {
@@ -397,33 +397,10 @@ export const EventCard: React.FC<EventCardProps> = ({ item, isDarkMode = true })
                 )
             }
 
-            {/* Sentiment Voting Bar (Right Side) */}
+            {/* Action Bar (Right Side) - Restored to Siren/Shield/Eye */}
             <div className="absolute right-4 bottom-48 z-20 flex flex-col gap-6 pointer-events-auto items-center">
 
-                {/* Upvote */}
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (userVote === 'up') {
-                            setUserVote(null);
-                            setVotes(prev => ({ ...prev, up: Math.max(0, prev.up - 1) }));
-                        } else {
-                            if (userVote === 'down') setVotes(prev => ({ ...prev, down: Math.max(0, prev.down - 1) }));
-                            setUserVote('up');
-                            setVotes(prev => ({ ...prev, up: prev.up + 1 }));
-                        }
-                    }}
-                    className="flex flex-col items-center gap-1 group"
-                >
-                    <div className={`w-12 h-12 rounded-full backdrop-blur-md border flex items-center justify-center transition-all active:scale-90 shadow-lg ${userVote === 'up' ? 'bg-green-500/80 border-green-400 text-white' : 'bg-black/40 border-white/20 text-white group-hover:bg-white/10'}`}>
-                        <ThumbsUp size={20} fill={userVote === 'up' ? "currentColor" : "none"} />
-                    </div>
-                    <span className="text-[10px] font-bold text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-                        {votes.up}
-                    </span>
-                </button>
-
-                {/* Downvote */}
+                {/* Siren - PANIC / UNSAFE */}
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -438,10 +415,46 @@ export const EventCard: React.FC<EventCardProps> = ({ item, isDarkMode = true })
                     }}
                     className="flex flex-col items-center gap-1 group"
                 >
-                    <div className={`w-12 h-12 rounded-full backdrop-blur-md border flex items-center justify-center transition-all active:scale-90 shadow-lg ${userVote === 'down' ? 'bg-red-500/80 border-red-400 text-white' : 'bg-black/40 border-white/20 text-white group-hover:bg-white/10'}`}>
-                        <ThumbsDown size={20} fill={userVote === 'down' ? "currentColor" : "none"} />
+                    <div className={`w-12 h-12 rounded-full backdrop-blur-md border flex items-center justify-center transition-all active:scale-90 shadow-lg ${userVote === 'down' ? 'bg-red-500/80 border-red-400 text-white animate-pulse' : 'bg-black/40 border-white/20 text-white group-hover:bg-white/10'}`}>
+                        <Siren size={24} className={userVote === 'down' ? "fill-white" : ""} />
                     </div>
+                    <span className="text-[10px] font-bold text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                        {votes.down}
+                    </span>
                 </button>
+
+                {/* Shield - SAFE / VERIFY */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (userVote === 'up') {
+                            setUserVote(null);
+                            setVotes(prev => ({ ...prev, up: Math.max(0, prev.up - 1) }));
+                        } else {
+                            if (userVote === 'down') setVotes(prev => ({ ...prev, down: Math.max(0, prev.down - 1) }));
+                            setUserVote('up');
+                            setVotes(prev => ({ ...prev, up: prev.up + 1 }));
+                        }
+                    }}
+                    className="flex flex-col items-center gap-1 group"
+                >
+                    <div className={`w-12 h-12 rounded-full backdrop-blur-md border flex items-center justify-center transition-all active:scale-90 shadow-lg ${userVote === 'up' ? 'bg-blue-500/80 border-blue-400 text-white' : 'bg-black/40 border-white/20 text-white group-hover:bg-white/10'}`}>
+                        <Shield size={24} className={userVote === 'up' ? "fill-white" : ""} />
+                    </div>
+                    <span className="text-[10px] font-bold text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                        {votes.up}
+                    </span>
+                </button>
+
+                {/* Eye - VIEW / WITNESS */}
+                <div className="flex flex-col items-center gap-1 group">
+                    <div className="w-12 h-12 rounded-full backdrop-blur-md border flex items-center justify-center bg-black/40 border-white/20 text-white">
+                        <Eye size={24} />
+                    </div>
+                    <span className="text-[10px] font-bold text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                        {Math.floor(Math.random() * 50) + 12} {/* Mock View Count */}
+                    </span>
+                </div>
 
             </div>
         </div >

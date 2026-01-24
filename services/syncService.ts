@@ -37,7 +37,7 @@ export const uploadItem = async (item: FeedItem): Promise<void> => {
 
         const { uploadUrl, key } = await res.json();
 
-        // 3. Upload to R2 directly
+        // 3. Upload Video to R2
         const upload = await fetch(uploadUrl, {
             method: 'PUT',
             body: blob,
@@ -46,10 +46,46 @@ export const uploadItem = async (item: FeedItem): Promise<void> => {
             }
         });
 
-        if (!upload.ok) throw new Error('R2 Upload failed');
+        if (!upload.ok) throw new Error('R2 Video Upload failed');
+
+        // 3b. Upload Metadata JSON to R2
+        try {
+            const metadataPayload = {
+                ...item,
+                videoUrl: undefined, // Redundant
+                videoKey: key, // Link to video
+                syncedAt: new Date().toISOString()
+            };
+
+            // Request separate upload URL for JSON
+            const jsonFilename = `${item.id}.json`;
+            const jsonRes = await fetch('/api/upload-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: jsonFilename,
+                    contentType: 'application/json'
+                })
+            });
+
+            if (jsonRes.ok) {
+                const { uploadUrl: jsonUploadUrl } = await jsonRes.json();
+                await fetch(jsonUploadUrl, {
+                    method: 'PUT',
+                    body: JSON.stringify(metadataPayload, null, 2),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                console.log(`[Sync] Metadata uploaded for ${item.id}`);
+            } else {
+                console.warn(`[Sync] Failed to get metadata upload URL for ${item.id}`);
+            }
+        } catch (metaErr) {
+            console.error(`[Sync] Metadata upload failed for ${item.id}`, metaErr);
+            // We don't fail the whole sync if just metadata fails, but ideally we should retry
+        }
 
         // 4. Update FeedItem with Public URL
-        const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_URL || 'https://pub-0e691fa72ff24b868e4bb11469764443.r2.dev';
+        const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_BASE_URL || 'https://pub-0e691fa72ff24b868e4bb11469764443.r2.dev';
         const publicUrl = `${R2_PUBLIC_URL}/${key}`;
 
         console.log(`[Sync] Upload complete: ${publicUrl}`);

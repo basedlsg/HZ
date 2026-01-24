@@ -22,7 +22,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ items, onRecordNew, onPa
             {/* Brand / Status */}
             <div className="pointer-events-auto">
                <h1 className={`font-black tracking-tighter text-xl drop-shadow-md ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  OMBRIXA <span className="text-[9px] font-mono opacity-50 ml-1">v4.0-dev</span>
+                  OMBRIXA
                </h1>
                <div className={`flex items-center gap-2 text-[10px] font-mono font-bold tracking-widest uppercase backdrop-blur border px-2 py-1 rounded mt-1 shadow-lg inline-flex ${isDarkMode ? 'bg-zinc-900/80 border-brand-purple/20 text-brand-purple' : 'bg-white/80 border-brand-purple/20 text-brand-purple'}`}>
                   <div className="w-1.5 h-1.5 bg-brand-purple rounded-full animate-pulse"></div>

@@ -3,7 +3,7 @@ import Webcam from 'react-webcam';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { X, Loader2, ShieldAlert, ArrowLeft, QrCode, Check, RefreshCcw, Copy, Flashlight, ZoomIn } from 'lucide-react';
 import { RecorderState, FeedItem, SyncStatus } from '../types';
-import { analyzeFootage } from '../services/llamaService'; // Switched from Gemini to Llama
+import { analyzeFootage } from '../services/geminiService'; // Using Gemini for analysis
 import { db } from '../services/db';
 import { loadModels, analyzeFaces } from '../services/forensicService';
 // import { uploadItem } from '../services/syncService'; // Disabled for local-only testing
@@ -352,7 +352,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
 
                 const [analysis, forensicResult] = await Promise.all([
                     analyzeWithTimeout(),
-                    analyzeFaces(img)
+                    // analyzeFaces(img) // DISABLED: Models not loaded
+                    Promise.resolve(null)
                 ]);
 
                 // Check if we already timed out

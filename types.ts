@@ -2,6 +2,7 @@ export enum AppPhase {
   CHECK_IN = 'CHECK_IN',
   CAMERA = 'CAMERA',
   FEED = 'FEED',
+  QUERY = 'QUERY',
 }
 
 export interface VehicleDetail {

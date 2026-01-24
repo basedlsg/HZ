@@ -5,6 +5,7 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { CheckInScreen } from './components/CheckInScreen';
 import { CameraScreen } from './components/CameraScreen';
 import { FeedScreen } from './components/FeedScreen';
+import { QueryPortalScreen } from './components/QueryPortalScreen';
 import { db } from './services/db';
 import { calculateDistance } from './services/geo'; // Import Geo service
 import { Moon, Sun } from 'lucide-react';
@@ -22,6 +23,11 @@ const App: React.FC = () => {
     const hour = new Date().getHours();
     const isDay = hour >= 6 && hour < 18;
     setIsDarkMode(!isDay); // Default based on time
+
+    // Simple routing check
+    if (window.location.pathname === '/query') {
+      setPhase(AppPhase.QUERY);
+    }
 
     // Version Check
     const storedVersion = localStorage.getItem('ombrixa_version');
@@ -138,6 +144,13 @@ const App: React.FC = () => {
           isDarkMode={isDarkMode}
           onRefresh={loadFeed}
         />
+      )}
+
+      {phase === AppPhase.QUERY && (
+        <QueryPortalScreen onBack={() => {
+          window.history.pushState({}, '', '/');
+          setPhase(AppPhase.CHECK_IN);
+        }} />
       )}
       <InstallPrompt />
     </div>
