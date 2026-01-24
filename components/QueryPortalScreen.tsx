@@ -35,71 +35,85 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
     };
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-black text-green-500 font-mono relative overflow-hidden">
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-black text-white font-sans relative overflow-hidden">
             {/* Background Grid Effect */}
-            <div className="absolute inset-0 z-0 pointer-events-none opacity-10"
-                style={{ backgroundImage: 'linear-gradient(0deg, transparent 24%, rgba(0, 255, 0, .3) 25%, rgba(0, 255, 0, .3) 26%, transparent 27%, transparent 74%, rgba(0, 255, 0, .3) 75%, rgba(0, 255, 0, .3) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(0, 255, 0, .3) 25%, rgba(0, 255, 0, .3) 26%, transparent 27%, transparent 74%, rgba(0, 255, 0, .3) 75%, rgba(0, 255, 0, .3) 76%, transparent 77%, transparent)', backgroundSize: '50px 50px' }}>
+            <div className="absolute inset-0 z-0 pointer-events-none opacity-20"
+                style={{ backgroundImage: 'linear-gradient(0deg, transparent 24%, rgba(124, 58, 237, .3) 25%, rgba(124, 58, 237, .3) 26%, transparent 27%, transparent 74%, rgba(124, 58, 237, .3) 75%, rgba(124, 58, 237, .3) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(124, 58, 237, .3) 25%, rgba(124, 58, 237, .3) 26%, transparent 27%, transparent 74%, rgba(124, 58, 237, .3) 75%, rgba(124, 58, 237, .3) 76%, transparent 77%, transparent)', backgroundSize: '50px 50px' }}>
             </div>
 
-            <div className="z-10 w-full max-w-md bg-zinc-900/80 backdrop-blur-md border border-green-500/30 rounded-lg p-8 shadow-[0_0_20px_rgba(0,255,0,0.1)]">
-                <div className="flex items-center justify-center mb-8">
-                    <Terminal className="text-green-500 mr-3" size={32} />
-                    <h1 className="text-2xl font-bold tracking-widest uppercase">Ombrixa Query</h1>
+            <div className="z-10 w-full max-w-md bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center">
+
+                {/* Branding */}
+                <div className="flex flex-col items-center justify-center mb-10">
+                    <h1 className="font-black tracking-tighter text-3xl text-white drop-shadow-md mb-2">OMBRIXA</h1>
+                    <div className="flex items-center gap-2 text-[10px] font-mono font-bold tracking-widest uppercase px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                        <Terminal size={12} />
+                        <span>Secure Query Portal</span>
+                    </div>
                 </div>
 
-                <form onSubmit={handleSearch} className="flex flex-col gap-4">
-                    <div className="relative group">
+                <form onSubmit={handleSearch} className="flex flex-col gap-4 w-full">
+                    <div className="relative group w-full">
                         <input
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="ENTER IDENTIFIER..."
-                            className="w-full bg-black/50 border border-green-500/50 rounded p-4 pl-12 text-lg focus:outline-none focus:border-green-400 focus:shadow-[0_0_10px_rgba(0,255,0,0.3)] transition-all uppercase placeholder-green-800"
+                            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 pl-12 text-lg text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all uppercase placeholder-zinc-600 font-mono"
                         />
-                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-green-600 group-focus-within:text-green-400 transition-colors" size={20} />
+                        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-zinc-500 group-focus-within:text-purple-400 transition-colors" size={20} />
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading || !query.trim()}
-                        className="w-full bg-green-900/30 hover:bg-green-800/50 border border-green-500/50 text-green-400 font-bold py-4 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_15px_rgba(0,255,0,0.2)]"
+                        className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-900/20 active:scale-95 flex items-center justify-center gap-2"
                     >
-                        {loading ? 'SEARCHING DATABASE...' : 'INITIATE QUERY'}
+                        {loading ? (
+                            <>
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span>SEARCHING DATABASE...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>INITIATE QUERY</span>
+                            </>
+                        )}
                     </button>
                 </form>
 
                 {result && (
-                    <div className={`mt-8 p-6 rounded border flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 ${result === 'found' ? 'bg-green-900/20 border-green-500 text-green-400' :
-                            result === 'not_found' ? 'bg-red-900/20 border-red-500 text-red-500' :
-                                'bg-yellow-900/20 border-yellow-500 text-yellow-500'
+                    <div className={`mt-8 p-6 rounded-2xl border flex flex-col items-center justify-center w-full animate-in fade-in zoom-in duration-300 text-center ${result === 'found' ? 'bg-purple-900/20 border-purple-500/50 text-purple-300' :
+                            result === 'not_found' ? 'bg-red-900/10 border-red-500/30 text-red-400' :
+                                'bg-yellow-900/10 border-yellow-500/30 text-yellow-500'
                         }`}>
                         {result === 'found' && (
                             <>
-                                <CheckCircle size={48} className="mb-2" />
-                                <h2 className="text-xl font-bold">DATA LOCATED</h2>
-                                <p className="text-sm opacity-70 mt-1">Record exists in database.</p>
+                                <CheckCircle size={48} className="mb-3 text-purple-400" />
+                                <h2 className="text-xl font-bold text-white">DATA LOCATED</h2>
+                                <p className="text-sm opacity-70 mt-1">Record verified in secure storage.</p>
                             </>
                         )}
                         {result === 'not_found' && (
                             <>
-                                <XCircle size={48} className="mb-2" />
-                                <h2 className="text-xl font-bold">NO RECORD FOUND</h2>
-                                <p className="text-sm opacity-70 mt-1">Identifier not verified.</p>
+                                <XCircle size={48} className="mb-3" />
+                                <h2 className="text-xl font-bold text-white">NO RECORD FOUND</h2>
+                                <p className="text-sm opacity-70 mt-1">Identifier invalid or not yet synced.</p>
                             </>
                         )}
                         {result === 'error' && (
                             <>
-                                <AlertTriangle size={48} className="mb-2" />
-                                <h2 className="text-xl font-bold">SYSTEM ERROR</h2>
-                                <p className="text-sm opacity-70 mt-1">Connection failed. Retry.</p>
+                                <AlertTriangle size={48} className="mb-3" />
+                                <h2 className="text-xl font-bold text-white">SYSTEM ERROR</h2>
+                                <p className="text-sm opacity-70 mt-1">Connection failed. Please retry.</p>
                             </>
                         )}
                     </div>
                 )}
             </div>
 
-            <div className="absolute bottom-4 text-xs text-green-900/50 uppercase">
-                Restricted Access Only // Omni-Corp Systems v4.0
+            <div className="absolute bottom-6 text-xs text-zinc-600 uppercase font-mono tracking-widest">
+                Restricted Access // Omni-Corp v4.0
             </div>
         </div>
     );
