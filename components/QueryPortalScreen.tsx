@@ -52,111 +52,118 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
             {/* Help Button - Subtle */}
             <button
                 onClick={() => setShowInstructions(true)}
-                className="absolute top-8 right-8 z-20 text-zinc-600 hover:text-white transition-colors"
+                className="absolute top-8 right-8 z-20 text-zinc-600 hover:text-purple-400 transition-colors"
             >
-                <HelpCircle size={20} />
+                <HelpCircle size={24} />
             </button>
 
-            {/* Main Card - Minimalist */}
+            {/* Main Card - Minimalist but Branded */}
             <div className="z-10 w-full max-w-sm flex flex-col items-center">
 
-                {/* Branding - Pure Text */}
+                {/* Branding - BIG BOLD */}
                 <div className="flex flex-col items-center justify-center mb-12">
-                    <h1 className="font-bold tracking-tight text-3xl text-white mb-2">OMBRIXA</h1>
+                    <h1 className="font-black tracking-tighter text-5xl text-white mb-2 tracking-wide drop-shadow-2xl">OMBRIXA</h1>
+                    <div className="flex items-center gap-2 text-[10px] font-mono font-bold tracking-[0.3em] uppercase px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-purple-500">
+                        <span>Secure Query Portal</span>
+                    </div>
                 </div>
 
-                <form onSubmit={handleSearch} className="flex flex-col gap-4 w-full">
+                <form onSubmit={handleSearch} className="flex flex-col gap-6 w-full">
                     <div className="relative group w-full">
                         <input
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Enter query..."
-                            className="w-full bg-zinc-900 border border-transparent focus:border-zinc-700 rounded-lg p-4 pl-4 text-base text-white placeholder-zinc-600 outline-none transition-all"
+                            placeholder="Enter unique identifier..."
+                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-purple-500/50 rounded-xl p-5 text-lg text-white placeholder-zinc-700 outline-none transition-all focus:ring-1 focus:ring-purple-500/20"
                         />
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading || !query.trim()}
-                        className="w-full bg-white hover:bg-zinc-200 text-black font-medium py-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold text-lg py-5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-900/20 active:scale-95"
                     >
                         {loading ? (
-                            <>
-                                <span className="w-4 h-4 border-2 border-zinc-400 border-t-black rounded-full animate-spin" />
-                            </>
+                            <div className="flex items-center justify-center gap-3">
+                                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span className="text-sm tracking-widest uppercase">Searching...</span>
+                            </div>
                         ) : (
-                            <>
-                                <span>Check Database</span>
-                            </>
+                            <span>INITIATE QUERY</span>
                         )}
                     </button>
                 </form>
 
                 {/* Minimalist Result Display */}
                 {result && (
-                    <div className="mt-8 w-full flex flex-col items-center text-center animate-in fade-in duration-300">
+                    <div className="mt-10 w-full flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-2 duration-300">
                         {result === 'found' && (
-                            <div className="flex items-center gap-2 text-green-500">
-                                <CheckCircle size={20} />
-                                <span className="font-medium">Verified Record Found</span>
+                            <div className="flex flex-col items-center gap-2">
+                                <div className="p-3 bg-purple-500/10 rounded-full mb-1">
+                                    <CheckCircle size={32} className="text-purple-400" />
+                                </div>
+                                <h2 className="text-xl font-bold text-white">DATA LOCATED</h2>
+                                <p className="text-zinc-500 text-sm">Record verified in secure storage.</p>
                             </div>
                         )}
                         {result === 'not_found' && (
-                            <div className="flex items-center gap-2 text-zinc-500">
-                                <XCircle size={20} />
-                                <span className="font-medium">No Record Found</span>
+                            <div className="flex flex-col items-center gap-2">
+                                <div className="p-3 bg-zinc-900 rounded-full mb-1">
+                                    <XCircle size={32} className="text-zinc-500" />
+                                </div>
+                                <h2 className="text-xl font-bold text-zinc-400">NO RECORD FOUND</h2>
                             </div>
                         )}
                         {result === 'error' && (
-                            <div className="flex flex-col items-center gap-2 text-red-500">
-                                <div className="flex items-center gap-2">
+                            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl w-full flex flex-col items-center gap-2">
+                                <div className="flex items-center gap-2 text-red-400">
                                     <AlertTriangle size={20} />
-                                    <span className="font-medium">Error</span>
+                                    <span className="font-bold">System Error</span>
                                 </div>
-                                <span className="text-xs text-zinc-600 font-mono">{errorMsg}</span>
+                                <span className="text-xs text-red-300/70 font-mono text-center break-all">{errorMsg}</span>
                             </div>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* Instructions Modal - Clean */}
+            {/* Instructions Modal - Consistent Style */}
             {showInstructions && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-8 relative">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl p-8 relative shadow-2xl">
                         <button
                             onClick={() => setShowInstructions(false)}
-                            className="absolute top-4 right-4 text-zinc-600 hover:text-white transition-colors"
+                            className="absolute top-5 right-5 text-zinc-600 hover:text-white transition-colors"
                         >
                             <X size={20} />
                         </button>
 
-                        <h2 className="text-lg font-bold text-white mb-2">Instructions</h2>
-                        <p className="text-zinc-500 mb-6 text-sm">
+                        <h2 className="text-xl font-bold text-white mb-2">Instructions</h2>
+                        <p className="text-zinc-500 mb-8 text-sm">
                             Query the secure database for:
                         </p>
 
-                        <ul className="space-y-3 mb-8">
-                            <li className="text-sm text-zinc-300 flex items-center gap-3">
-                                <span className="w-1 h-1 bg-zinc-500 rounded-full" />
-                                Badge Number
-                            </li>
-                            <li className="text-sm text-zinc-300 flex items-center gap-3">
-                                <span className="w-1 h-1 bg-zinc-500 rounded-full" />
-                                License Plate
-                            </li>
-                            <li className="text-sm text-zinc-300 flex items-center gap-3">
-                                <span className="w-1 h-1 bg-zinc-500 rounded-full" />
-                                Name / Alias
-                            </li>
-                        </ul>
+                        <div className="space-y-4 mb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold text-xs">01</div>
+                                <span className="text-zinc-300 text-sm font-medium">Badge Number</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold text-xs">02</div>
+                                <span className="text-zinc-300 text-sm font-medium">License Plate</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold text-xs">03</div>
+                                <span className="text-zinc-300 text-sm font-medium">Name / Alias</span>
+                            </div>
+                        </div>
 
                         <button
                             onClick={() => setShowInstructions(false)}
-                            className="w-full bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium py-3 rounded-lg transition-all"
+                            className="w-full bg-white hover:bg-zinc-200 text-black font-bold py-4 rounded-xl transition-all active:scale-95"
                         >
-                            Close
+                            Understood
                         </button>
                     </div>
                 </div>
