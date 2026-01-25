@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { Search, CheckCircle, XCircle, AlertTriangle, Terminal } from 'lucide-react';
+import { Search, CheckCircle, XCircle, AlertTriangle, Terminal, HelpCircle, X } from 'lucide-react';
 
 interface QueryPortalScreenProps {
     onBack?: () => void;
@@ -9,6 +8,7 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<'found' | 'not_found' | 'error' | null>(null);
+    const [showInstructions, setShowInstructions] = useState(false);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -41,7 +41,15 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
                 style={{ backgroundImage: 'linear-gradient(0deg, transparent 24%, rgba(124, 58, 237, .3) 25%, rgba(124, 58, 237, .3) 26%, transparent 27%, transparent 74%, rgba(124, 58, 237, .3) 75%, rgba(124, 58, 237, .3) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(124, 58, 237, .3) 25%, rgba(124, 58, 237, .3) 26%, transparent 27%, transparent 74%, rgba(124, 58, 237, .3) 75%, rgba(124, 58, 237, .3) 76%, transparent 77%, transparent)', backgroundSize: '50px 50px' }}>
             </div>
 
-            <div className="z-10 w-full max-w-md bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center">
+            {/* Help Button */}
+            <button
+                onClick={() => setShowInstructions(true)}
+                className="absolute top-6 right-6 z-20 text-white/50 hover:text-purple-400 transition-colors"
+            >
+                <HelpCircle size={24} />
+            </button>
+
+            <div className="z-10 w-full max-w-md bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl flex flex-col items-center">
 
                 {/* Branding */}
                 <div className="flex flex-col items-center justify-center mb-10">
@@ -58,8 +66,8 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="ENTER IDENTIFIER..."
-                            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 pl-12 text-lg text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all uppercase placeholder-zinc-600 font-mono"
+                            placeholder="Enter query..."
+                            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 pl-12 text-lg text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all placeholder-zinc-600 font-sans"
                         />
                         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-zinc-500 group-focus-within:text-purple-400 transition-colors" size={20} />
                     </div>
@@ -72,7 +80,7 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
                         {loading ? (
                             <>
                                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                <span>SEARCHING DATABASE...</span>
+                                <span>SEARCHING...</span>
                             </>
                         ) : (
                             <>
@@ -84,8 +92,8 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
 
                 {result && (
                     <div className={`mt-8 p-6 rounded-2xl border flex flex-col items-center justify-center w-full animate-in fade-in zoom-in duration-300 text-center ${result === 'found' ? 'bg-purple-900/20 border-purple-500/50 text-purple-300' :
-                            result === 'not_found' ? 'bg-red-900/10 border-red-500/30 text-red-400' :
-                                'bg-yellow-900/10 border-yellow-500/30 text-yellow-500'
+                        result === 'not_found' ? 'bg-red-900/10 border-red-500/30 text-red-400' :
+                            'bg-yellow-900/10 border-yellow-500/30 text-yellow-500'
                         }`}>
                         {result === 'found' && (
                             <>
@@ -112,9 +120,65 @@ export const QueryPortalScreen: React.FC<QueryPortalScreenProps> = ({ onBack }) 
                 )}
             </div>
 
-            <div className="absolute bottom-6 text-xs text-zinc-600 uppercase font-mono tracking-widest">
-                Restricted Access // Omni-Corp v4.0
-            </div>
+            {/* Instructions Modal */}
+            {showInstructions && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-3xl p-8 shadow-2xl relative">
+                        <button
+                            onClick={() => setShowInstructions(false)}
+                            className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"
+                        >
+                            <X size={24} />
+                        </button>
+
+                        <h2 className="text-2xl font-bold text-white mb-2">Query Instructions</h2>
+                        <p className="text-zinc-400 mb-6 text-sm">
+                            Enter a specific identifier to verify its existence in the Ombrixa secure database.
+                        </p>
+
+                        <div className="space-y-4">
+                            <div className="bg-purple-900/10 border border-purple-500/20 rounded-xl p-4">
+                                <h3 className="text-purple-400 font-bold text-sm uppercase mb-2 tracking-wider">Searchable Data Points</h3>
+                                <ul className="text-zinc-300 space-y-2 text-sm">
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
+                                        Badge Number
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
+                                        License Plate Number
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
+                                        Name / Alias
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
+                                        Date (YYYY-MM-DD)
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                                <div className="p-2 bg-purple-500/20 rounded-lg text-purple-400">
+                                    <Terminal size={18} />
+                                </div>
+                                <div>
+                                    <p className="text-white text-xs font-bold uppercase">Coming Soon</p>
+                                    <p className="text-zinc-500 text-xs">Facial Recognition Search</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowInstructions(false)}
+                            className="w-full mt-8 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-all"
+                        >
+                            Understood
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
