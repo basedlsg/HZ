@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { Search, CheckCircle, XCircle, AlertTriangle, Terminal, HelpCircle, X } from 'lucide-react';
 
 interface QueryPortalScreenProps {
