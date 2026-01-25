@@ -1,9 +1,7 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-export const config = {
-    runtime: 'edge',
-};
+
 
 // Initialize S3 Client
 const R2 = new S3Client({

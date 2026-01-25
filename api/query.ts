@@ -1,8 +1,6 @@
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 
-export const config = {
-    runtime: 'edge',
-};
+
 
 // Initialize S3 Client
 const R2 = new S3Client({
