@@ -25,7 +25,7 @@ const App: React.FC = () => {
     setIsDarkMode(!isDay); // Default based on time
 
     // Simple routing check
-    if (window.location.pathname === '/query') {
+    if (window.location.pathname.startsWith('/query')) {
       setPhase(AppPhase.QUERY);
     }
 
