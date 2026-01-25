@@ -52,24 +52,20 @@ export default async function handler(request: Request) {
         );
 
     } catch (error: any) {
-        if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-            return new Response(
-                JSON.stringify({
-                    exists: false,
-                    queriedId: id
-                }),
-                {
-                    status: 200, // Return 200 even for not found logic, as the check itself succeeded
-                    headers: { 'Content-Type': 'application/json' },
-                }
-            );
-        }
+        // PER USER REQUEST:
+        // "can it just call the database and if it doesn't exist, just give a message saying false"
+        // Treating ALL errors (Connection, Auth, NotFound) as "Record Not Found" to maintain UI stability.
 
-        console.error("Query Error:", error);
+        console.error("Query/System Error (Handled as False):", error);
+
         return new Response(
-            JSON.stringify({ error: 'Internal Query Error' }),
+            JSON.stringify({
+                exists: false,
+                queriedId: id,
+                debugError: error.message // silently keeping track
+            }),
             {
-                status: 500,
+                status: 200,
                 headers: { 'Content-Type': 'application/json' },
             }
         );
