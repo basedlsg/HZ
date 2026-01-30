@@ -21,6 +21,7 @@ export const EventCard: React.FC<EventCardProps> = ({ item, isDarkMode = true })
     const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
     const [showDetails, setShowDetails] = useState(false);
     const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+    const [viewCount] = useState(() => Math.floor(Math.random() * 50) + 12); // Stable view count
 
     // Intersection Observer for Lazy Loading and Auto-play
     useEffect(() => {
@@ -250,155 +251,40 @@ export const EventCard: React.FC<EventCardProps> = ({ item, isDarkMode = true })
             </div>
 
             {/* Detailed Intel Overlay */}
-            {
-                showDetails && (
-                    <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-xl flex flex-col p-6 animate-in fade-in slide-in-from-bottom-5 duration-300">
-                        <div className="flex justify-between items-center mb-8">
-                            <div className="flex items-center gap-2">
-                                <Fingerprint className="text-brand-purple" size={20} />
-                                <h2 className="text-xl font-black tracking-tighter text-white uppercase italic">Detailed Intelligence</h2>
-                            </div>
-                            <button
-                                onClick={() => setShowDetails(false)}
-                                className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
+            {showDetails && <IntelOverlay item={item} onClose={() => setShowDetails(false)} />}
 
-                        <div className="flex-1 overflow-y-auto space-y-8 pb-12">
-                            {/* SITREP Section - ALWAYS SHOW */}
-                            <section>
-                                <div className="flex items-center gap-2 mb-4 text-brand-purple">
-                                    <AlertTriangle size={16} />
-                                    <h3 className="text-xs font-bold tracking-widest uppercase">Situation Report</h3>
-                                </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 font-mono text-xs leading-relaxed text-zinc-300">
-                                    {item.analysis?.summary ? (
-                                        <p>{item.analysis.summary}</p>
-                                    ) : (
-                                        <p className="italic opacity-50">Analysis pending or unavailable.</p>
-                                    )}
-                                </div>
-                            </section>
-
-                            {/* Safety & Civic Context */}
-                            <section className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2 text-brand-purple">
-                                        <Shield size={16} />
-                                        <h3 className="text-xs font-bold tracking-widest uppercase">Threat Lvl</h3>
-                                    </div>
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center justify-center">
-                                        <span className={`text-2xl font-black ${safetyColor(item.analysis?.safetyScore || 0)}`}>
-                                            {item.analysis?.safetyScore || 0}%
-                                        </span>
-                                        <span className="text-[9px] font-mono uppercase opacity-50 mt-1">
-                                            {(item.analysis?.safetyScore || 0) > 70 ? 'CRITICAL' : (item.analysis?.safetyScore || 0) > 40 ? 'CAUTION' : 'SAFE'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2 text-brand-purple">
-                                        <MapPin size={16} />
-                                        <h3 className="text-xs font-bold tracking-widest uppercase">Context</h3>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {item.analysis?.detectedCivicDetails && item.analysis.detectedCivicDetails.length > 0 ? (
-                                            item.analysis.detectedCivicDetails.map((tag, i) => (
-                                                <span key={i} className="px-2 py-1 rounded bg-white/10 border border-white/5 text-[9px] font-mono uppercase text-zinc-300">
-                                                    {tag.replace(/_/g, ' ')}
-                                                </span>
-                                            ))
-                                        ) : (
-                                            <span className="text-[9px] italic opacity-50 px-2">No tags</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* Vehicles Section */}
-                            {item.analysis?.vehicleDetails && item.analysis.vehicleDetails.length > 0 && (
-                                <section>
-                                    <div className="flex items-center gap-2 mb-4 text-brand-purple">
-                                        <Car size={16} />
-                                        <h3 className="text-xs font-bold tracking-widest uppercase">Detected Vehicles</h3>
-                                    </div>
-                                    <div className="grid gap-3">
-                                        {item.analysis.vehicleDetails.map((v, i) => (
-                                            <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 font-mono text-[11px]">
-                                                <div className="grid grid-cols-2 gap-y-2">
-                                                    <div className="text-zinc-500 uppercase">Make/Model</div>
-                                                    <div className="text-white text-right font-bold">{v.make || 'Unknown'} {v.model || ''}</div>
-
-                                                    <div className="text-zinc-500 uppercase">Type/Color</div>
-                                                    <div className="text-white text-right">{v.color || 'Unknown'} {v.type || ''}</div>
-
-                                                    <div className="text-zinc-500 uppercase">License Plate</div>
-                                                    <div className="text-brand-purple text-right font-bold">{v.licensePlate || 'N/A'}</div>
-
-                                                    {v.agency && (
-                                                        <>
-                                                            <div className="text-zinc-500 uppercase">Agency</div>
-                                                            <div className="text-white text-right">{v.agency}</div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
-                            )}
-
-                            {/* People Section */}
-                            {item.analysis?.peopleDetails && item.analysis.peopleDetails.length > 0 && (
-                                <section>
-                                    <div className="flex items-center gap-2 mb-4 text-brand-purple">
-                                        <User size={16} />
-                                        <h3 className="text-xs font-bold tracking-widest uppercase">Observed Personnel</h3>
-                                    </div>
-                                    <div className="grid gap-3">
-                                        {item.analysis.peopleDetails.map((p, i) => (
-                                            <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 font-mono text-[11px]">
-                                                <div className="grid grid-cols-2 gap-y-2">
-                                                    <div className="text-zinc-500 uppercase">ID/Name</div>
-                                                    <div className="text-white text-right font-bold">{p.badgeText || 'Unidentified'}</div>
-
-                                                    <div className="text-zinc-500 uppercase">Badge #</div>
-                                                    <div className="text-brand-purple text-right font-bold">{p.badgeNumber || 'N/A'}</div>
-
-                                                    <div className="text-zinc-500 uppercase">Rank</div>
-                                                    <div className="text-white text-right italic">{p.rank || 'N/A'}</div>
-
-                                                    <div className="text-zinc-500 uppercase">Agency</div>
-                                                    <div className="text-white text-right">{p.agency || 'N/A'}</div>
-
-                                                    {p.precinct && (
-                                                        <>
-                                                            <div className="text-zinc-500 uppercase">Precinct</div>
-                                                            <div className="text-white text-right">{p.precinct}</div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </section>
-                            )}
-
-                            {(!item.analysis?.vehicleDetails?.length && !item.analysis?.peopleDetails?.length) && (
-                                <div className="h-40 flex flex-col items-center justify-center text-center">
-                                    <Shield size={32} className="text-white/10 mb-2" />
-                                    <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">No detailed metadata extracted</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* Action Bar (Right Side) - Restored to Siren/Shield/Eye */}
+            {/* Action Bar (Right Side) */}
             <div className="absolute right-4 bottom-48 z-20 flex flex-col gap-6 pointer-events-auto items-center">
+
+                {/* Download Button */}
+                <button
+                    onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                            const blob = await db.getVideoBlob(item.id);
+                            if (blob) {
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `ombrixa-evidence-${item.id.slice(0, 8)}.webm`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                            } else {
+                                alert("Video file not found on device.");
+                            }
+                        } catch (err) {
+                            console.error("Download failed", err);
+                            alert("Download failed.");
+                        }
+                    }}
+                    className="flex flex-col items-center gap-1 group"
+                >
+                    <div className="w-12 h-12 rounded-full backdrop-blur-md border flex items-center justify-center bg-black/40 border-white/20 text-white group-hover:bg-white/10 active:scale-90 transition-all">
+                        <CloudUpload size={24} className="rotate-180" /> {/* Reuse CloudUpload as Download */}
+                    </div>
+                </button>
 
                 {/* Siren - PANIC / UNSAFE */}
                 <button
@@ -452,11 +338,117 @@ export const EventCard: React.FC<EventCardProps> = ({ item, isDarkMode = true })
                         <Eye size={24} />
                     </div>
                     <span className="text-[10px] font-bold text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-                        {Math.floor(Math.random() * 50) + 12} {/* Mock View Count */}
+                        {viewCount}
                     </span>
                 </div>
 
             </div>
         </div >
+    );
+};
+
+// Helper for Editable Intel
+const IntelOverlay = ({ item, onClose }: { item: FeedItem, onClose: () => void }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [analysis, setAnalysis] = useState(item.analysis);
+
+    const handleSave = async () => {
+        try {
+            // Update in DB
+            const updatedItem = { ...item, analysis: analysis };
+            await db.feedItems.put(updatedItem);
+            setIsEditing(false);
+            // Ideally notify parent to refresh, but local mutation works for display
+            item.analysis = analysis;
+        } catch (e) {
+            console.error("Failed to save changes", e);
+            alert("Failed to save changes.");
+        }
+    };
+
+    return (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-xl flex flex-col p-6 animate-in fade-in slide-in-from-bottom-5 duration-300">
+            <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-2">
+                    <Fingerprint className="text-brand-purple" size={20} />
+                    <h2 className="text-xl font-black tracking-tighter text-white uppercase italic">Detailed Intelligence</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                        className={`px-4 py-2 rounded-full text-xs font-bold font-mono uppercase transition-all ${isEditing ? 'bg-green-500 text-white' : 'bg-white/10 text-zinc-400 hover:bg-white/20'}`}
+                    >
+                        {isEditing ? 'Save Changes' : 'Edit Data'}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-8 pb-12">
+                {/* SITREP Section */}
+                <section>
+                    <div className="flex items-center gap-2 mb-4 text-brand-purple">
+                        <AlertTriangle size={16} />
+                        <h3 className="text-xs font-bold tracking-widest uppercase">Situation Report</h3>
+                    </div>
+                    <div className="p-4 rounded-xl bg-white/5 border border-white/10 font-mono text-xs leading-relaxed text-zinc-300">
+                        {isEditing ? (
+                            <textarea
+                                value={analysis?.summary || ''}
+                                onChange={e => setAnalysis({ ...analysis!, summary: e.target.value })}
+                                className="w-full h-32 bg-black/50 p-2 text-white border border-brand-purple/50 rounded-md focus:outline-none"
+                            />
+                        ) : (
+                            <p>{analysis?.summary || 'Analysis pending...'}</p>
+                        )}
+                    </div>
+                </section>
+
+                {/* Vehicles Section */}
+                {analysis?.vehicleDetails && analysis.vehicleDetails.length > 0 && (
+                    <section>
+                        <div className="flex items-center gap-2 mb-4 text-brand-purple">
+                            <Car size={16} />
+                            <h3 className="text-xs font-bold tracking-widest uppercase">Detected Vehicles</h3>
+                        </div>
+                        <div className="grid gap-3">
+                            {analysis.vehicleDetails.map((v, i) => (
+                                <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 font-mono text-[11px]">
+                                    <div className="grid grid-cols-2 gap-y-2 items-center">
+                                        <div className="text-zinc-500 uppercase">Make/Model</div>
+                                        {isEditing ? (
+                                            <div className="flex gap-1 justify-end">
+                                                <input value={v.make} onChange={e => {
+                                                    const newV = [...analysis.vehicleDetails]; newV[i].make = e.target.value; setAnalysis({ ...analysis, vehicleDetails: newV });
+                                                }} className="bg-black/50 text-white p-1 rounded w-16 text-right" placeholder="Make" />
+                                                <input value={v.model} onChange={e => {
+                                                    const newV = [...analysis.vehicleDetails]; newV[i].model = e.target.value; setAnalysis({ ...analysis, vehicleDetails: newV });
+                                                }} className="bg-black/50 text-white p-1 rounded w-16 text-right" placeholder="Model" />
+                                            </div>
+                                        ) : (
+                                            <div className="text-white text-right font-bold">{v.make || 'Unknown'} {v.model || ''}</div>
+                                        )}
+
+                                        <div className="text-zinc-500 uppercase">License Plate</div>
+                                        {isEditing ? (
+                                            <input value={v.licensePlate} onChange={e => {
+                                                const newV = [...analysis.vehicleDetails]; newV[i].licensePlate = e.target.value; setAnalysis({ ...analysis, vehicleDetails: newV });
+                                            }} className="bg-black/50 text-brand-purple font-bold p-1 rounded w-full text-right" placeholder="Plate" />
+                                        ) : (
+                                            <div className="text-brand-purple text-right font-bold">{v.licensePlate || 'N/A'}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+            </div>
+        </div>
     );
 };

@@ -97,6 +97,33 @@ export class OmbrixaDB extends Dexie {
   async updateSyncStatus(id: string, status: any) {
     await this.feedItems.update(id, { syncStatus: status });
   }
+
+  async searchFeed(query: string): Promise<FeedItem[]> {
+    const q = query.toLowerCase().trim();
+    if (!q) return [];
+
+    // Scan all items (in a real app with large DB, we'd use an index)
+    // Searching in: Summary, Vehicle Plates, Person Badges
+    return await this.feedItems.filter(item => {
+      // 1. Search Summary
+      if (item.analysis?.summary?.toLowerCase().includes(q)) return true;
+
+      // 2. Search Vehicles (Plates/Make/Model)
+      if (item.analysis?.vehicleDetails?.some(v =>
+        v.licensePlate?.toLowerCase().includes(q) ||
+        v.make?.toLowerCase().includes(q) ||
+        v.model?.toLowerCase().includes(q)
+      )) return true;
+
+      // 3. Search People (Badge/Name)
+      if (item.analysis?.peopleDetails?.some(p =>
+        p.badgeNumber?.toLowerCase().includes(q) ||
+        p.badgeText?.toLowerCase().includes(q)
+      )) return true;
+
+      return false;
+    }).toArray();
+  }
 }
 
 export const db = new OmbrixaDB();

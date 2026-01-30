@@ -1,17 +1,10 @@
+
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-
-
-// Initialize S3 Client
-const R2 = new S3Client({
-    region: 'auto',
-    endpoint: process.env.R2_ENDPOINT,
-    credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-    },
-});
+export const config = {
+    runtime: 'edge',
+};
 
 export default async function handler(request: Request) {
     if (request.method !== 'POST') {
@@ -28,22 +21,37 @@ export default async function handler(request: Request) {
             });
         }
 
-        // Generate Key based on type
-        // For Metadata (JSON): deterministic key 'metadata/${id}.json' to allow easy lookup
-        // For Video: timestamped key to avoid collisions (though ID collision is unlikely)
+        const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+        const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+        const endpoint = process.env.R2_ENDPOINT;
+        const bucket = process.env.R2_BUCKET || 'hotzones';
+
+        if (!accessKeyId || !secretAccessKey || !endpoint) {
+            return new Response(JSON.stringify({ error: 'Misconfigured Server' }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        const R2 = new S3Client({
+            region: 'auto',
+            endpoint: endpoint,
+            credentials: {
+                accessKeyId,
+                secretAccessKey: secretAccessKey
+            },
+        });
+
         let key;
         if (contentType === 'application/json') {
-            // For metadata, we want to be able to query by ID.
-            // Filename is expected to be `${id}.json`
             key = `metadata/${filename}`;
         } else {
-            // For videos or others
             const cleanName = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
             key = `uploads/${Date.now()}_${cleanName}`;
         }
 
         const command = new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET || 'hotzones',
+            Bucket: bucket,
             Key: key,
             ContentType: contentType,
         });

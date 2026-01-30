@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { X, Loader2, ShieldAlert, ArrowLeft, QrCode, Check, RefreshCcw, Copy, Flashlight, ZoomIn } from 'lucide-react';
+import { X, Loader2, ShieldAlert, ArrowLeft, QrCode, Check, RefreshCcw, Copy, Flashlight, ZoomIn, Play, Pause } from 'lucide-react';
 import { RecorderState, FeedItem, SyncStatus } from '../types';
 import { analyzeFootage } from '../services/geminiService'; // Using Gemini for analysis
 import { db } from '../services/db';
@@ -21,6 +21,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
 
+    const [isPaused, setIsPaused] = useState(false); // For Freeze/Pause functionality
+
     const mimeTypeRef = useRef<string>(''); // Store selected MIME type
 
     const [recorderState, setRecorderState] = useState<RecorderState>(RecorderState.IDLE);
@@ -28,6 +30,22 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
     const timerRef = useRef<number | null>(null);
     const stopFnRef = useRef<(() => void) | null>(null); // Ref to store stop function for auto-stop
     const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+
+    // Geolocation Tracking
+    const currentLocationRef = useRef<GeolocationPosition | null>(null);
+    useEffect(() => {
+        let watchId: number;
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => { currentLocationRef.current = pos; },
+                (err) => { console.warn("Location watch error:", err); },
+                { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+            );
+        }
+        return () => {
+            if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+        };
+    }, []);
 
     // Flash/Torch Control
     const [torchEnabled, setTorchEnabled] = useState(false);
@@ -359,14 +377,22 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
                 // Check if we already timed out
                 if (analysisTimedOut) return;
 
-                let lat = 0, lng = 0;
-                try {
-                    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-                    });
-                    lat = pos.coords.latitude;
-                    lng = pos.coords.longitude;
-                } catch (e) { console.warn("No location", e); }
+                let lat = currentLocationRef.current?.coords.latitude || 0;
+                let lng = currentLocationRef.current?.coords.longitude || 0;
+
+                // Fallback: If still 0, try one last immediate check (ignoring timeout if cached is available)
+                if (lat === 0 && lng === 0) {
+                    try {
+                        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: true });
+                        });
+                        lat = pos.coords.latitude;
+                        lng = pos.coords.longitude;
+                    } catch (e) {
+                        console.warn("Final fallback location check failed", e);
+                        // Keep 0, 0 if genuinely unavailable
+                    }
+                }
 
                 const newItem: FeedItem = {
                     id: crypto.randomUUID(),
@@ -540,6 +566,26 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
                                     )}
                                 </div>
                             )}
+
+                            {/* Pause/Freeze Button for Scene Clarity */}
+                            <div className="absolute left-8 bottom-32 pointer-events-auto">
+                                <button
+                                    onClick={() => {
+                                        if (webcamRef.current?.video) {
+                                            if (isPaused) {
+                                                webcamRef.current.video.play();
+                                                setIsPaused(false);
+                                            } else {
+                                                webcamRef.current.video.pause();
+                                                setIsPaused(true);
+                                            }
+                                        }
+                                    }}
+                                    className={`p-4 rounded-full backdrop-blur-md border border-white/10 text-white transition-all ${isPaused ? 'bg-blue-500/50 border-blue-400 animate-pulse' : 'bg-black/40'}`}
+                                >
+                                    {isPaused ? <Play size={24} className="fill-white" /> : <Pause size={24} className="fill-white" />}
+                                </button>
+                            </div>
 
                             {/* Main Controls Row */}
                             <div className="flex items-center justify-around w-full max-w-sm pointer-events-auto">

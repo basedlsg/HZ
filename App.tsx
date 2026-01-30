@@ -14,16 +14,16 @@ const App: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>(AppPhase.CHECK_IN);
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('ombrixa_theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
 
   // Force Update Logic
-  const APP_VERSION = 'v4.0-dev'; // MUST MATCH UI DISPLAY
+  const APP_VERSION = 'v4.1-dev'; // Bumping version to force reload
 
   useEffect(() => {
-    const hour = new Date().getHours();
-    const isDay = hour >= 6 && hour < 18;
-    setIsDarkMode(!isDay); // Default based on time
-
     // Simple routing check
     if (window.location.pathname.startsWith('/query')) {
       setPhase(AppPhase.QUERY);
@@ -35,13 +35,8 @@ const App: React.FC = () => {
       console.log(`Version Sync: ${storedVersion} -> ${APP_VERSION}`);
       localStorage.setItem('ombrixa_version', APP_VERSION);
 
-      // If we jumped major versions or simply mismatch, force a hard reload
-      // to clear any stale Service Worker caches affecting crucial files
       if (storedVersion) {
-        // Only force reload if it's not a fresh install (to avoid infinite loops on fresh load if logic is buggy)
-        // But here we want to solve "stuck on v1.1" so we are aggressive
         console.log("Forcing hard reload for update...");
-        // Unregister SW to be safe
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function (registrations) {
             for (let registration of registrations) {
@@ -53,6 +48,17 @@ const App: React.FC = () => {
       }
     }
   }, []);
+
+  // Root class sync for Tailwind dark: classes
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('ombrixa_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('ombrixa_theme', 'light');
+    }
+  }, [isDarkMode]);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 

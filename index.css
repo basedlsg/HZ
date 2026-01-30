@@ -5,9 +5,26 @@
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #000000;
-  /* Force black background */
+
+  /* Theme Variables */
+  --bg-primary: #ffffff;
+  --text-primary: #09090b;
+  --bg-secondary: #f4f4f5;
+  --border-primary: #e4e4e7;
+  --accent-primary: #9333ea;
+  /* Purple 600 */
+
+  @media (prefers-color-scheme: dark) {
+    --bg-primary: #000000;
+    --text-primary: #ffffff;
+    --bg-secondary: #09090b;
+    --border-primary: #18181b;
+    --accent-primary: #a855f7;
+    /* Purple 500 */
+  }
+
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -43,7 +60,7 @@ body {
   /* Use dynamic viewport height for mobile */
   overflow: hidden;
   /* Prevent scrolling globally */
-  background-color: black;
+  background-color: var(--bg-primary);
   position: fixed;
   /* Lock position on iOS */
   touch-action: none;
