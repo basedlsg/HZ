@@ -2,7 +2,7 @@
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 export const config = {
-    runtime: 'edge',
+    // runtime: 'edge', // Disabled to avoid AWS SDK size limits on Vercel Edge
 };
 
 export default async function handler(request: Request) {

@@ -3,7 +3,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const config = {
-    runtime: 'edge',
+    // runtime: 'edge', // Disabled to avoid AWS SDK size limits
 };
 
 export default async function handler(request: Request) {
