@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { X, Loader2, ShieldAlert, ArrowLeft, QrCode, Check, RefreshCcw, Copy, Flashlight, ZoomIn, Play, Pause } from 'lucide-react';
-import { RecorderState, FeedItem, SyncStatus } from '../types';
+import { AnalysisResult, RecorderState, FeedItem, SyncStatus } from '../types';
 import { analyzeFootage } from '../services/geminiService'; // Using Gemini for analysis
 import { db } from '../services/db';
 import { loadModels, analyzeFaces } from '../services/forensicService';
@@ -63,6 +63,16 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
     const [scanResult, setScanResult] = useState<string | null>(null);
     const [copyFeedback, setCopyFeedback] = useState(false);
     const [streamReady, setStreamReady] = useState(false); // Track when webcam stream is ready
+
+    const buildFallbackAnalysis = (reason: string): AnalysisResult => ({
+        summary: `Analysis unavailable: ${reason}. Intel can be edited manually.`,
+        detectedCivicDetails: [],
+        vehicles: [],
+        vehicleDetails: [],
+        uniforms: [],
+        peopleDetails: [],
+        safetyScore: 0
+    });
 
     // DISABLED: face-api.js model loading causes iOS memory crashes
     // The forensic service loads ~20MB of ML models which overwhelms Safari
@@ -202,7 +212,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
                     }
                 };
 
-                mediaRecorder.start();
+                // Emit chunks periodically to avoid empty buffers on some mobile browsers.
+                mediaRecorder.start(250);
                 mediaRecorderRef.current = mediaRecorder;
 
                 timerRef.current = window.setInterval(() => {
@@ -230,10 +241,45 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
 
     const stopRecordingAndAnalyze = useCallback(async () => {
         if (timerRef.current) clearInterval(timerRef.current);
-        if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-
         setRecorderState(RecorderState.PROCESSING);
-        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for blob
+
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            const recorder = mediaRecorderRef.current;
+            await new Promise<void>((resolve) => {
+                let settled = false;
+                const settle = () => {
+                    if (settled) return;
+                    settled = true;
+                    resolve();
+                };
+                const timeoutId = window.setTimeout(settle, 3000);
+                const handleStop = () => {
+                    window.clearTimeout(timeoutId);
+                    settle();
+                };
+                const handleError = () => {
+                    window.clearTimeout(timeoutId);
+                    settle();
+                };
+
+                recorder.addEventListener('stop', handleStop, { once: true });
+                recorder.addEventListener('error', handleError as EventListener, { once: true });
+
+                try {
+                    recorder.requestData();
+                } catch (e) {
+                    console.warn("Recorder requestData failed", e);
+                }
+
+                try {
+                    recorder.stop();
+                } catch (e) {
+                    console.warn("Recorder stop failed", e);
+                    window.clearTimeout(timeoutId);
+                    settle();
+                }
+            });
+        }
 
         // Create video blob with correct mime type
         const videoBlob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
@@ -352,6 +398,42 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
                 setRecorderState(RecorderState.IDLE);
             }, ANALYSIS_TIMEOUT_MS);
 
+            const resolveLocation = async (): Promise<{ lat: number, lng: number }> => {
+                let lat = currentLocationRef.current?.coords.latitude || 0;
+                let lng = currentLocationRef.current?.coords.longitude || 0;
+
+                if (lat === 0 && lng === 0) {
+                    try {
+                        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: true });
+                        });
+                        lat = pos.coords.latitude;
+                        lng = pos.coords.longitude;
+                    } catch (e) {
+                        console.warn("Final fallback location check failed", e);
+                    }
+                }
+
+                return { lat, lng };
+            };
+
+            const saveItem = async (analysis: AnalysisResult, thumbnail: string) => {
+                const { lat, lng } = await resolveLocation();
+                const newItem: FeedItem = {
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    location: { lat, lng },
+                    thumbnailUrl: thumbnail,
+                    isProcessing: false,
+                    isUserGenerated: true,
+                    analysis,
+                    syncStatus: SyncStatus.PENDING
+                };
+
+                await db.saveRecording(newItem, videoBlob);
+                onRecordingComplete(newItem);
+            };
+
             try {
                 const { thumbnail, frames } = capturedData;
                 console.log(`Analyzing ${frames.length} frames. Est size: ${(frames.join('').length / 1024).toFixed(0)} KB`);
@@ -377,50 +459,33 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({ onPanic, onRecording
                 // Check if we already timed out
                 if (analysisTimedOut) return;
 
-                let lat = currentLocationRef.current?.coords.latitude || 0;
-                let lng = currentLocationRef.current?.coords.longitude || 0;
-
-                // Fallback: If still 0, try one last immediate check (ignoring timeout if cached is available)
-                if (lat === 0 && lng === 0) {
-                    try {
-                        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-                            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: true });
-                        });
-                        lat = pos.coords.latitude;
-                        lng = pos.coords.longitude;
-                    } catch (e) {
-                        console.warn("Final fallback location check failed", e);
-                        // Keep 0, 0 if genuinely unavailable
-                    }
+                if (chunksRef.current.length === 0) {
+                    throw new Error("No video data captured");
                 }
 
-                const newItem: FeedItem = {
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    location: { lat, lng },
-                    thumbnailUrl: thumbnail,
-                    isProcessing: false,
-                    isUserGenerated: true,
-                    analysis: analysis,
-                    encryptedForensics: forensicResult?.encryptedBiometrics,
-                    iv: forensicResult?.iv,
-                    syncStatus: SyncStatus.PENDING
+                const analysisToSave: AnalysisResult = {
+                    ...analysis,
+                    // Keep structure stable for downstream editing/search.
+                    detectedCivicDetails: analysis.detectedCivicDetails ?? [],
+                    vehicles: analysis.vehicles ?? [],
+                    vehicleDetails: analysis.vehicleDetails ?? [],
+                    uniforms: analysis.uniforms ?? [],
+                    peopleDetails: analysis.peopleDetails ?? []
                 };
 
-                if (chunksRef.current.length === 0) {
-                    alert("⚠️ Recording Error: No video data captured.");
-                    return;
-                }
-
-                // Save to DB
-                await db.saveRecording(newItem, videoBlob);
-                // uploadItem(newItem); // Disabled for local-only testing
-                onRecordingComplete(newItem);
+                await saveItem(analysisToSave, thumbnail);
 
             } catch (error: any) {
                 console.error("Processing failed", error);
                 if (!analysisTimedOut) {
-                    alert(`❌ Analysis Failed\n${error?.message || 'Unknown error'}\n\nYour clip was NOT saved.`);
+                    try {
+                        const fallbackAnalysis = buildFallbackAnalysis(error?.message || 'unknown error');
+                        await saveItem(fallbackAnalysis, capturedData.thumbnail);
+                        alert("⚠️ Analysis failed, but your clip was saved. You can edit intel manually.");
+                    } catch (saveError) {
+                        console.error("Failed to save fallback item", saveError);
+                        alert(`❌ Analysis Failed\n${error?.message || 'Unknown error'}\n\nYour clip was NOT saved.`);
+                    }
                 }
             } finally {
                 clearTimeout(analysisTimer);
